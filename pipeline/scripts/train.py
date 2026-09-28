@@ -31,7 +31,7 @@ LABELS = {
 }
 
 
-def evaluate(key, name, y_true, proba):
+def evaluate(key, name, y_true, proba, verified_oil=None):
     y_pred = (proba >= 0.5).astype(int)
     # Oil (1) first so the matrix reads [[TP, FN], [FP, TN]].
     (tp, fn), (fp, tn) = confusion_matrix(y_true, y_pred, labels=[1, 0])
@@ -48,6 +48,10 @@ def evaluate(key, name, y_true, proba):
         "recall": round(float(recall), 4),
         "f1": round(float(2 * precision * recall / max(precision + recall, 1e-9)), 4),
         "confusion": {"labels": ["Oil", "Non-oil"], "matrix": [[int(tp), int(fn)], [int(fp), int(tn)]]},
+        # Recall on human-reviewed oil only — the least biased number here.
+        "verified_recall": None if verified_oil is None or not verified_oil.any()
+        else round(float(y_pred[verified_oil].mean()), 4),
+        "verified_oil_n": 0 if verified_oil is None else int(verified_oil.sum()),
         "pr_curve": sorted(
             ({"recall": round(float(r[i]), 3), "precision": round(float(p[i]), 3)} for i in idx),
             key=lambda d: d["recall"],
@@ -59,9 +63,10 @@ def main():
     df = pd.read_csv(OUTPUT / "training_samples.csv")
     train, test = df[df.random < 0.8], df[df.random >= 0.8]
     X_tr, y_tr, X_te, y_te = train[ALL_FEATURES], train["class"], test[ALL_FEATURES], test["class"]
+    verified_oil = ((test.get("verified", 0) == 1) & (test["class"] == 1)).to_numpy()
 
     rf = RandomForestClassifier(n_estimators=RF_TREES, random_state=87, n_jobs=-1).fit(X_tr, y_tr)
-    rf_m = evaluate("rf", "Random Forest", y_te, rf.predict_proba(X_te)[:, 1])
+    rf_m = evaluate("rf", "Random Forest", y_te, rf.predict_proba(X_te)[:, 1], verified_oil)
     rf_m["feature_importance"] = sorted(
         ({"feature": LABELS[f], "importance": round(float(v), 4)} for f, v in zip(ALL_FEATURES, rf.feature_importances_)),
         key=lambda d: -d["importance"],
@@ -72,7 +77,7 @@ def main():
         StandardScaler(),
         MLPClassifier(hidden_layer_sizes=(64, 32), early_stopping=True, max_iter=500, random_state=87),
     ).fit(X_tr, y_tr)
-    ann_m = evaluate("ann", "Neural Network (MLP)", y_te, ann.predict_proba(X_te)[:, 1])
+    ann_m = evaluate("ann", "Neural Network (MLP)", y_te, ann.predict_proba(X_te)[:, 1], verified_oil)
     ann_m["feature_importance"] = None
 
     out = {
@@ -84,7 +89,8 @@ def main():
     }
     (WEB_DATA / "model_metrics.json").write_text(json.dumps(out, indent=2))
     for m in (rf_m, ann_m):
-        print(f"{m['name']}: OA={m['overall_accuracy']} kappa={m['kappa']} F1={m['f1']}")
+        print(f"{m['name']}: OA={m['overall_accuracy']} kappa={m['kappa']} F1={m['f1']} "
+              f"verified-oil recall={m['verified_recall']} (n={m['verified_oil_n']})")
 
 
 if __name__ == "__main__":

@@ -69,6 +69,12 @@ function ModelCard({ model }: { model: ModelMetrics }) {
           </div>
         ))}
       </div>
+      {model.verified_recall != null && (
+        <p className="mt-3 text-xs text-ink-2">
+          Catches <span className="tabular text-ink">{(model.verified_recall * 100).toFixed(0)}%</span> of the{" "}
+          {model.verified_oil_n} human-reviewed oil labels (Cerulean) in the test set.
+        </p>
+      )}
       <div className="mt-4 text-xs text-muted">Confusion matrix (test set)</div>
       <div className="mt-2 grid grid-cols-[auto_1fr_1fr] items-center gap-2 text-xs">
         <span />

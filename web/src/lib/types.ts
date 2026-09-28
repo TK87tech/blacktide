@@ -49,6 +49,8 @@ export interface ModelMetrics {
   precision: number;
   recall: number;
   f1: number;
+  verified_recall?: number | null;
+  verified_oil_n?: number;
   confusion: { labels: string[]; matrix: number[][] };
   feature_importance: { feature: string; importance: number }[] | null;
   pr_curve: { recall: number; precision: number }[];

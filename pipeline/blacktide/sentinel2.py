@@ -18,8 +18,15 @@ def _indices(img: ee.Image) -> ee.Image:
         r.normalizedDifference(["B8", "B4"]).rename("NDVI"),
         r.normalizedDifference(["B3", "B8"]).rename("NDWI"),
         r.normalizedDifference(["B3", "B11"]).rename("MNDWI"),
-        r.select("B3").add(r.select("B4")).divide(r.select("B2")).rename("OSI"),
+        # Clamped: a near-zero blue band (haze, shadow) otherwise blows the ratio up.
+        r.select("B3").add(r.select("B4")).divide(r.select("B2").max(0.01)).clamp(0, 5).rename("OSI"),
     ).copyProperties(img, ["system:time_start"])
+
+
+# Fully masked stand-in, so windows with no usable scenes (pre-2017, all-cloud months)
+# yield masked optical bands instead of an error — the SAR-only model covers those pixels.
+def _empty() -> ee.Image:
+    return ee.Image.constant([0, 0, 0, 0]).rename(["NDVI", "NDWI", "MNDWI", "OSI"]).toFloat().updateMask(0)
 
 
 def collection(aoi: ee.Geometry, start: str, end: str, clear: float = 0.6) -> ee.ImageCollection:
@@ -29,7 +36,8 @@ def collection(aoi: ee.Geometry, start: str, end: str, clear: float = 0.6) -> ee
         .filterDate(start, end)
         .linkCollection(ee.ImageCollection(CLOUD_SCORE), ["cs_cdf"])
         .map(lambda img: img.updateMask(img.select("cs_cdf").gte(clear)))
-        .map(_indices)
+        .map(lambda img: ee.Image(_indices(img)).toFloat())
+        .merge(ee.ImageCollection([_empty()]))
     )
 
 
