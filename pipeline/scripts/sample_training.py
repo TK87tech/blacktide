@@ -14,7 +14,7 @@ table asset <ASSET_ROOT>/training_<domain> (detect.py).
 
 import csv
 import json
-import random
+import hashlib
 import time
 import sys
 from collections import defaultdict
@@ -92,10 +92,14 @@ def run(groups: dict, fn, label: str) -> list[dict]:
     return rows
 
 
+def split_key(label_id: str) -> float:
+    """Stable 0–1 value per label, so the 80/20 split doesn't change between runs."""
+    return int(hashlib.sha1(str(label_id).encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+
+
 def save(rows: list[dict], domain: str, feature_cols: list[str]) -> None:
-    rng = random.Random(87)
     for r in rows:
-        r["properties"]["random"] = rng.random()
+        r["properties"]["random"] = split_key(r["properties"]["label_id"])
 
     OUTPUT.mkdir(parents=True, exist_ok=True)
     path = OUTPUT / f"training_{domain}.csv"

@@ -15,7 +15,7 @@ import ee
 def _prep(img: ee.Image) -> ee.Image:
     # Border noise only lives along the scene edges. Mask very low values there, and
     # nowhere else: thick oil slicks are often darker than -30 dB and must be kept.
-    interior = ee.Image.constant(1).clip(img.geometry().buffer(-5000)).unmask(0)
+    interior = ee.Image.constant(1).clip(img.geometry().buffer(-5000)).unmask(0, False)
     edge = img.select("VV").gt(-30).Or(interior)
     linear = ee.Image(10).pow(img.select(["VV", "VH"]).divide(10))
     filtered = linear.focalMedian(radius=30, kernelType="circle", units="meters")
@@ -78,7 +78,10 @@ def scene_features(img: ee.Image) -> ee.Image:
     """
     db = ee.Image(_prep(img))
     vv = db.select("VV")
-    local = vv.subtract(vv.focalMedian(1500, "circle", "meters")).rename("VV_local")
+    # Background brightness on a 100 m grid — a 1.5 km median at 10 m is ~100x the work
+    # for the same answer.
+    coarse = vv.reduceResolution(ee.Reducer.mean(), maxPixels=128).reproject(vv.projection().atScale(100))
+    local = vv.subtract(coarse.focalMedian(1500, "circle", "meters")).rename("VV_local")
     return ee.Image.cat(
         db, local, texture(db), wind_at(img.date()), img.select("angle").rename("angle")
     ).copyProperties(img, ["system:time_start", "system:index"])

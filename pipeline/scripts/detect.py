@@ -20,6 +20,7 @@ import hashlib
 import json
 import math
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -36,6 +37,7 @@ from blacktide.config import (  # noqa: E402
 from blacktide.sites import SITES  # noqa: E402
 
 MAX_EVENTS_PER_IMAGE = 100
+VECTOR_SCALE = 40  # grouping pixels into events; 20 m is 4x slower for no real gain
 
 
 def months(start: str, end: str):
@@ -70,7 +72,7 @@ def vectorise(p: ee.Image, valid: ee.Image, region: ee.Geometry, threshold: floa
     hit = p.gte(threshold).And(valid)
     hit = hit.updateMask(hit.connectedPixelCount(100, True).gte(MIN_PIXELS)).selfMask()
     blobs = hit.addBands(p).reduceToVectors(
-        geometry=region, scale=SCALE, geometryType="polygon", eightConnected=True,
+        geometry=region, scale=VECTOR_SCALE, geometryType="polygon", eightConnected=True,
         reducer=ee.Reducer.mean(), maxPixels=1e10, tileScale=4,
     )
     return blobs.map(lambda f: f.set("area_ha", f.geometry().area(1).divide(1e4))).sort("area_ha", False).limit(MAX_EVENTS_PER_IMAGE)
@@ -78,7 +80,7 @@ def vectorise(p: ee.Image, valid: ee.Image, region: ee.Geometry, threshold: floa
 
 def enrich(blobs: ee.FeatureCollection, img: ee.Image, bands: list[str]) -> list[dict]:
     mangrove = ee.ImageCollection("LANDSAT/MANGROVE_FORESTS").mosaic().unmask(0).multiply(ee.Image.pixelArea()).divide(1e4)
-    out = img.select(bands).reduceRegions(blobs, ee.Reducer.mean(), SCALE, tileScale=4)
+    out = img.select(bands).reduceRegions(blobs, ee.Reducer.mean(), VECTOR_SCALE, tileScale=4)
     out = mangrove.rename("mangrove_ha").reduceRegions(out, ee.Reducer.sum().setOutputs(["mangrove_ha"]), 30, tileScale=4)
     pop = (
         ee.ImageCollection("WorldPop/GP/100m/pop")
@@ -181,13 +183,16 @@ def main():
 
             def run_scene(item):
                 sid, t = item
-                try:
-                    day = date.fromtimestamp(t / 1000).isoformat()
-                    return [to_event(f["properties"], day, "water", ["S1"], "rf-water")
-                            for f in detect_water_scene(sid, aoi, water_clf, water, args.threshold)]
-                except ee.EEException as e:
-                    print(f"  {sid[:40]}: {str(e)[:90]}")
-                    return []
+                day = date.fromtimestamp(t / 1000).isoformat()
+                for attempt in range(3):
+                    try:
+                        return [to_event(f["properties"], day, "water", ["S1"], "rf-water")
+                                for f in detect_water_scene(sid, aoi, water_clf, water, args.threshold)]
+                    except Exception as e:  # noqa: BLE001 — timeouts, EE errors: retry, then skip the pass
+                        err = e
+                        time.sleep(5 * (attempt + 1))
+                print(f"  skipped {sid[17:32]}: {str(err)[:90]}", flush=True)
+                return []
 
             with ThreadPoolExecutor(max_workers=6) as pool:
                 for evs in pool.map(run_scene, info):
@@ -198,9 +203,9 @@ def main():
                     to_event(f["properties"], ms, "land", ["S1", "S2"] if f["properties"].get("NDVI") is not None else ["S1"], "rf-land")
                     for f in detect_land_month(ms, me, aoi, *land_clfs, water, args.threshold)
                 )
-            except ee.EEException as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"  land {ms}: {str(e)[:90]}")
-        print(f"{ms}: {len(found) - n_before} events")
+        print(f"{ms}: {len(found) - n_before} events", flush=True)
 
     if args.dry_run:
         OUTPUT.mkdir(parents=True, exist_ok=True)
