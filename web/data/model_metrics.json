@@ -1,0 +1,273 @@
+{
+  "sample": true,
+  "train_samples": 4800,
+  "test_samples": 1200,
+  "split": "80/20 stratified",
+  "models": [
+    {
+      "key": "rf",
+      "name": "Random Forest",
+      "overall_accuracy": 0.9317,
+      "kappa": 0.8546,
+      "precision": 0.9035,
+      "recall": 0.9156,
+      "f1": 0.9095,
+      "confusion": {
+        "labels": [
+          "Oil",
+          "Non-oil"
+        ],
+        "matrix": [
+          [
+            412,
+            38
+          ],
+          [
+            44,
+            706
+          ]
+        ]
+      },
+      "feature_importance": [
+        {
+          "feature": "VV backscatter",
+          "importance": 0.21
+        },
+        {
+          "feature": "GLCM entropy",
+          "importance": 0.16
+        },
+        {
+          "feature": "VV/VH ratio",
+          "importance": 0.14
+        },
+        {
+          "feature": "VH backscatter",
+          "importance": 0.12
+        },
+        {
+          "feature": "NDVI change",
+          "importance": 0.11
+        },
+        {
+          "feature": "OSI",
+          "importance": 0.09
+        },
+        {
+          "feature": "MNDWI",
+          "importance": 0.07
+        },
+        {
+          "feature": "NDWI",
+          "importance": 0.05
+        },
+        {
+          "feature": "GLCM contrast",
+          "importance": 0.03
+        },
+        {
+          "feature": "GLCM correlation",
+          "importance": 0.02
+        }
+      ],
+      "pr_curve": [
+        {
+          "recall": 0.0,
+          "precision": 1.0
+        },
+        {
+          "recall": 0.05,
+          "precision": 0.999
+        },
+        {
+          "recall": 0.1,
+          "precision": 0.998
+        },
+        {
+          "recall": 0.15,
+          "precision": 0.996
+        },
+        {
+          "recall": 0.2,
+          "precision": 0.994
+        },
+        {
+          "recall": 0.25,
+          "precision": 0.992
+        },
+        {
+          "recall": 0.3,
+          "precision": 0.988
+        },
+        {
+          "recall": 0.35,
+          "precision": 0.983
+        },
+        {
+          "recall": 0.4,
+          "precision": 0.978
+        },
+        {
+          "recall": 0.45,
+          "precision": 0.971
+        },
+        {
+          "recall": 0.5,
+          "precision": 0.962
+        },
+        {
+          "recall": 0.55,
+          "precision": 0.952
+        },
+        {
+          "recall": 0.6,
+          "precision": 0.94
+        },
+        {
+          "recall": 0.65,
+          "precision": 0.925
+        },
+        {
+          "recall": 0.7,
+          "precision": 0.909
+        },
+        {
+          "recall": 0.75,
+          "precision": 0.89
+        },
+        {
+          "recall": 0.8,
+          "precision": 0.869
+        },
+        {
+          "recall": 0.85,
+          "precision": 0.845
+        },
+        {
+          "recall": 0.9,
+          "precision": 0.819
+        },
+        {
+          "recall": 0.95,
+          "precision": 0.789
+        },
+        {
+          "recall": 1.0,
+          "precision": 0.756
+        }
+      ]
+    },
+    {
+      "key": "ann",
+      "name": "Neural Network (MLP)",
+      "overall_accuracy": 0.9092,
+      "kappa": 0.8067,
+      "precision": 0.8747,
+      "recall": 0.8844,
+      "f1": 0.8796,
+      "confusion": {
+        "labels": [
+          "Oil",
+          "Non-oil"
+        ],
+        "matrix": [
+          [
+            398,
+            52
+          ],
+          [
+            57,
+            693
+          ]
+        ]
+      },
+      "feature_importance": null,
+      "pr_curve": [
+        {
+          "recall": 0.0,
+          "precision": 1.0
+        },
+        {
+          "recall": 0.05,
+          "precision": 0.999
+        },
+        {
+          "recall": 0.1,
+          "precision": 0.998
+        },
+        {
+          "recall": 0.15,
+          "precision": 0.996
+        },
+        {
+          "recall": 0.2,
+          "precision": 0.993
+        },
+        {
+          "recall": 0.25,
+          "precision": 0.99
+        },
+        {
+          "recall": 0.3,
+          "precision": 0.985
+        },
+        {
+          "recall": 0.35,
+          "precision": 0.979
+        },
+        {
+          "recall": 0.4,
+          "precision": 0.972
+        },
+        {
+          "recall": 0.45,
+          "precision": 0.962
+        },
+        {
+          "recall": 0.5,
+          "precision": 0.95
+        },
+        {
+          "recall": 0.55,
+          "precision": 0.936
+        },
+        {
+          "recall": 0.6,
+          "precision": 0.919
+        },
+        {
+          "recall": 0.65,
+          "precision": 0.899
+        },
+        {
+          "recall": 0.7,
+          "precision": 0.876
+        },
+        {
+          "recall": 0.75,
+          "precision": 0.85
+        },
+        {
+          "recall": 0.8,
+          "precision": 0.82
+        },
+        {
+          "recall": 0.85,
+          "precision": 0.786
+        },
+        {
+          "recall": 0.9,
+          "precision": 0.749
+        },
+        {
+          "recall": 0.95,
+          "precision": 0.707
+        },
+        {
+          "recall": 1.0,
+          "precision": 0.66
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "sample": true,
+  "generated_at": "2026-09-28T05:15:05+00:00",
+  "period_start": "2017-01-01",
+  "period_end": "2026-08-31",
+  "model_version": "rf-sample",
+  "aoi": "Niger Delta (Rivers, Bayelsa, Delta, Akwa Ibom)",
+  "source": "Synthetic sample data. Replace by running the Earth Engine pipeline."
+}
