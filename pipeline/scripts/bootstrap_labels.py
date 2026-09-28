@@ -1,17 +1,19 @@
 """Build a starting training set automatically — no clicking.
 
+Water labels are tied to a specific Sentinel-1 pass ("scene"), for the per-pass water model:
   * Oil on water   — SkyTruth Cerulean slick polygons (human-reviewed first,
                      then high-confidence machine detections)
-  * Clean surfaces — stratified random points from ESA WorldCover classes
-                     (mangrove, forest, cropland, grassland, wetland, built-up, water)
+  * Clean water    — random water pixels in randomly chosen passes
   * Look-alikes    — dark radar water where GFS winds were calm (< 3 m/s), i.e.
                      darkness explained by wind, not oil; labelled clean
+Land labels are monthly, for the land model:
+  * Clean land     — stratified random points from ESA WorldCover land classes
 
 Land / creek oil is NOT covered here — that comes from the Earth Engine
 change-detection candidates you confirm afterwards.
 
     py -3 pipeline/scripts/bootstrap_labels.py
-    py -3 pipeline/scripts/bootstrap_labels.py --lookalike-scenes 80 --negatives-per-class 150
+    py -3 pipeline/scripts/bootstrap_labels.py --merge        # keep reviewed / hand-made labels
 """
 
 import argparse
@@ -31,17 +33,16 @@ from blacktide.config import AOIS, LABELS  # noqa: E402
 
 DELTA = AOIS["delta"]
 YEARS = range(2017, date.today().year)
-WORLDCOVER = {10: "tree cover", 30: "grassland", 40: "cropland", 50: "built-up", 80: "water", 90: "wetland", 95: "mangrove"}
+WORLDCOVER = {10: "tree cover", 30: "grassland", 40: "cropland", 50: "built-up", 90: "wetland", 95: "mangrove"}
 
 rng = random.Random(87)
 
 
-def point_label(lon, lat, cls, day, source, verified, lid):
-    return {
-        "type": "Feature",
-        "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]},
-        "properties": {"id": lid, "class": cls, "date": day, "source": source, "verified": verified},
-    }
+def point_label(lon, lat, cls, day, source, verified, lid, scene=None):
+    props = {"id": lid, "class": cls, "date": day, "source": source, "verified": verified}
+    if scene:
+        props["scene"] = scene
+    return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]}, "properties": props}
 
 
 def points_inside(geom, n: int) -> list[Point]:
@@ -63,7 +64,7 @@ def oil_labels(max_machine: int) -> tuple[list[dict], list[tuple]]:
     reviewed, machine = [], []
     for s in slicks:
         p = s["properties"]
-        if not s.get("geometry") or not p.get("slick_timestamp"):
+        if not s.get("geometry") or not p.get("slick_timestamp") or not p.get("s1_scene_id"):
             continue
         if p.get("hitl_cls_name") in cerulean.OIL_CLASSES:
             reviewed.append(s)
@@ -82,7 +83,7 @@ def oil_labels(max_machine: int) -> tuple[list[dict], list[tuple]]:
             n = 2 if verified and (s["properties"].get("area") or 0) > 1e6 else 1
             for i, pt in enumerate(points_inside(geom, n)):
                 labels.append(point_label(pt.x, pt.y, 1, day, "cerulean-reviewed" if verified else "cerulean-machine",
-                                          verified, f"cer-{s['properties']['id']}-{i}"))
+                                          verified, f"cer-{s['properties']['id']}-{i}", s["properties"]["s1_scene_id"]))
     print(f"  oil labels: {len(labels)} ({len(reviewed)} reviewed slicks, {len(machine)} machine slicks)")
     return labels, footprints
 
@@ -112,7 +113,7 @@ def clean_labels(per_class: int, footprints) -> list[dict]:
     return labels
 
 
-def lookalike_labels(n_scenes: int, per_scene: int, footprints) -> list[dict]:
+def water_labels(n_scenes: int, per_scene: int, footprints) -> list[dict]:
     delta = ee.Geometry.Rectangle(DELTA)
     water = (
         ee.Image("JRC/GSW1_4/GlobalSurfaceWater").select("occurrence").unmask(0).gte(80)
@@ -141,10 +142,14 @@ def lookalike_labels(n_scenes: int, per_scene: int, footprints) -> list[dict]:
             g = gfs.first()
             wind = g.select("u_component_of_wind_10m_above_ground").hypot(g.select("v_component_of_wind_10m_above_ground"))
             dark = img.select("VV").focalMedian(50, "circle", "meters").lt(-22)
-            mask = dark.And(water).And(wind.lt(3)).selfMask().rename("m")
-            pts = mask.sample(
-                region=img.geometry().intersection(delta, 100), scale=50, numPixels=2000, seed=87, geometries=True,
-            ).limit(per_scene).getInfo()["features"]
+            region = img.geometry().intersection(delta, 100)
+            look = dark.And(water).And(wind.lt(3)).selfMask().rename("m").sample(
+                region=region, scale=50, numPixels=2000, seed=87, geometries=True,
+            ).limit(per_scene).map(lambda f: f.set("kind", "lookalike-lowwind"))
+            clean = water.selfMask().rename("m").sample(
+                region=region, scale=100, numPixels=500, seed=88, geometries=True,
+            ).limit(per_scene).map(lambda f: f.set("kind", "water-scene"))
+            pts = look.merge(clean).getInfo()["features"]
         except ee.EEException as e:
             print(f"  skip {sid[:40]}: {str(e)[:80]}")
             continue
@@ -153,8 +158,10 @@ def lookalike_labels(n_scenes: int, per_scene: int, footprints) -> list[dict]:
             lon, lat = f["geometry"]["coordinates"]
             if any(g_.distance(Point(lon, lat)) < 0.05 and m == day[:7] for g_, m in footprints):
                 continue
-            labels.append(point_label(lon, lat, 0, day, "lookalike-lowwind", False, f"lk-{sid[-6:]}-{i}"))
-    print(f"  look-alike labels: {len(labels)} from {len(info)} scenes")
+            kind = f["properties"]["kind"]
+            labels.append(point_label(lon, lat, 0, day, kind, False, f"{kind[:2]}-{sid[-6:]}-{i}", sid))
+    n_look = sum(lb["properties"]["source"] == "lookalike-lowwind" for lb in labels)
+    print(f"  clean water labels: {len(labels) - n_look}, look-alikes: {n_look} (from {len(info)} scenes)")
     return labels
 
 
@@ -162,20 +169,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-machine-slicks", type=int, default=300)
     ap.add_argument("--negatives-per-class", type=int, default=150)
-    ap.add_argument("--lookalike-scenes", type=int, default=60)
-    ap.add_argument("--lookalikes-per-scene", type=int, default=8)
+    ap.add_argument("--water-scenes", type=int, default=150)
+    ap.add_argument("--per-scene", type=int, default=6, help="look-alikes and clean-water points per scene")
     ap.add_argument("--merge", action="store_true", help="keep existing labels (e.g. hand-made ones) and add to them")
     args = ap.parse_args()
 
     auth.init()
     oil, footprints = oil_labels(args.max_machine_slicks)
     clean = clean_labels(args.negatives_per_class, footprints)
-    looks = lookalike_labels(args.lookalike_scenes, args.lookalikes_per_scene, footprints)
+    looks = water_labels(args.water_scenes, args.per_scene, footprints)
 
     feats = oil + clean + looks
     if args.merge and LABELS.exists():
         existing = json.loads(LABELS.read_text())["features"]
-        auto = ("cerulean", "worldcover", "lookalike")
+        auto = ("cerulean", "worldcover", "lookalike", "water-scene")
         kept = [f for f in existing if not str(f["properties"].get("source", "")).startswith(auto)]
         feats = kept + feats
         print(f"  kept {len(kept)} existing hand-made labels")

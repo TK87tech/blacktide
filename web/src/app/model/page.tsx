@@ -6,9 +6,21 @@ import type { ModelMetrics } from "@/lib/types";
 
 export const metadata = { title: "Model — BlackTide" };
 
+const DOMAIN_TITLE: Record<string, { title: string; desc: string }> = {
+  water: {
+    title: "Water — per satellite pass",
+    desc: "Sentinel-1 radar, local darkness, texture, wind speed and incidence angle for each pass.",
+  },
+  land: {
+    title: "Land & creek banks — monthly",
+    desc: "Monthly Sentinel-1 + Sentinel-2 composites; SAR-only fallback under cloud.",
+  },
+};
+
 export default function ModelPage() {
   const m = getMetrics();
-  const rf = m.models.find((x) => x.key === "rf");
+  // Older metrics files have no domain; treat them as one group.
+  const domains = [...new Set(m.models.map((x) => x.domain ?? "all"))];
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6">
@@ -18,22 +30,41 @@ export default function ModelPage() {
         {m.sample && " Figures shown are placeholders until the models are trained on real labels."}
       </p>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {m.models.map((model) => (
-          <ModelCard key={model.key} model={model} />
-        ))}
-      </div>
-
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <Card title="Precision–recall" desc="How precision holds up as the model is pushed to catch more spills">
-          <PRChart series={m.models.map((x) => ({ name: x.name, points: x.pr_curve }))} />
-        </Card>
-        {rf?.feature_importance && (
-          <Card title="What the Random Forest relies on" desc="Mean decrease in impurity across trees">
-            <ImportanceChart data={rf.feature_importance} />
-          </Card>
-        )}
-      </div>
+      {domains.map((d) => {
+        const models = m.models.filter((x) => (x.domain ?? "all") === d);
+        const rf = models.find((x) => x.feature_importance);
+        const head = DOMAIN_TITLE[d];
+        return (
+          <section key={d} className="mb-8">
+            {head && (
+              <div className="mb-3">
+                <h2 className="text-lg font-semibold">{head.title}</h2>
+                <p className="text-sm text-ink-2">{head.desc}</p>
+              </div>
+            )}
+            <div className="grid gap-3 md:grid-cols-2">
+              {models.map((model) => (
+                <ModelCard key={model.key} model={model} />
+              ))}
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <Card title="Precision–recall" desc="How precision holds up as the model is pushed to catch more spills">
+                <PRChart series={models.map((x) => ({ name: x.name, points: x.pr_curve }))} />
+              </Card>
+              {rf?.feature_importance && (
+                <Card title="What the Random Forest relies on" desc="Mean decrease in impurity across trees">
+                  <ImportanceChart data={rf.feature_importance} />
+                </Card>
+              )}
+            </div>
+          </section>
+        );
+      })}
+      {!domains.includes("land") && !m.sample && (
+        <p className="text-sm text-muted">
+          The land model appears here once enough reviewed land-spill labels exist.
+        </p>
+      )}
     </div>
   );
 }
@@ -73,6 +104,14 @@ function ModelCard({ model }: { model: ModelMetrics }) {
         <p className="mt-3 text-xs text-ink-2">
           Catches <span className="tabular text-ink">{(model.verified_recall * 100).toFixed(0)}%</span> of the{" "}
           {model.verified_oil_n} human-reviewed oil labels (Cerulean) in the test set.
+        </p>
+      )}
+      {model.lookalike_false_alarm != null && (
+        <p className="mt-1 text-xs text-ink-2">
+          Wrongly flags <span className="tabular text-ink">{(model.lookalike_false_alarm * 100).toFixed(0)}%</span> of
+          calm-water look-alikes and{" "}
+          <span className="tabular text-ink">{((model.clean_water_false_alarm ?? 0) * 100).toFixed(0)}%</span> of clean
+          water as oil.
         </p>
       )}
       <div className="mt-4 text-xs text-muted">Confusion matrix (test set)</div>

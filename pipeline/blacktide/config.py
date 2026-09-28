@@ -25,7 +25,12 @@ ASSET_ROOT = os.environ.get("BLACKTIDE_ASSET_ROOT") or (
 SCALE = 20  # metres; Sentinel-1 GRD IW native is ~10 m, 20 m keeps regional runs tractable
 SAR_FEATURES = ["VV", "VH", "VV_VH", "GLCM_ent", "GLCM_contrast", "GLCM_corr"]
 OPTICAL_FEATURES = ["NDVI", "NDVI_delta", "NDWI", "MNDWI", "OSI"]
-ALL_FEATURES = SAR_FEATURES + OPTICAL_FEATURES
+ALL_FEATURES = SAR_FEATURES + OPTICAL_FEATURES  # land model: monthly SAR + optical
+
+# Water model: one Sentinel-1 pass at a time, with the wind at that moment.
+SCENE_FEATURES = ["VV", "VH", "VV_VH", "VV_local", "GLCM_ent", "GLCM_contrast", "GLCM_corr", "wind", "angle"]
+# Slicks can't be told apart from calm water below ~2 m/s, and are washed out above ~12 m/s.
+MIN_WIND, MAX_WIND = 2.0, 12.0
 
 RF_TREES = 300
 DETECTION_THRESHOLD = 0.7   # probability of oil needed to flag a pixel

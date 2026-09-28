@@ -17,5 +17,8 @@ def stack(aoi: ee.Geometry, start: str, end: str) -> ee.Image:
 
 
 def water_mask() -> ee.Image:
-    """Permanent / seasonal water from JRC Global Surface Water (occurrence ≥ 50%)."""
-    return ee.Image("JRC/GSW1_4/GlobalSurfaceWater").select("occurrence").gte(50).unmask(0)
+    """Water = JRC surface water (occurrence >= 50%), WorldCover water, or open sea
+    (WorldCover has no data offshore)."""
+    jrc = ee.Image("JRC/GSW1_4/GlobalSurfaceWater").select("occurrence").unmask(0).gte(50)
+    wc = ee.ImageCollection("ESA/WorldCover/v200").first().unmask(80).eq(80)
+    return jrc.Or(wc).rename("water")

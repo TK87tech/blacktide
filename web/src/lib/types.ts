@@ -26,6 +26,7 @@ export interface SpillEvent {
   nosdra_match: boolean | null;
   people_5km: number;
   mangrove_ha: number;
+  wind_ms?: number | null;
   features: EventFeatures;
   lon: number;
   lat: number;
@@ -49,8 +50,11 @@ export interface ModelMetrics {
   precision: number;
   recall: number;
   f1: number;
+  domain?: "water" | "land";
   verified_recall?: number | null;
   verified_oil_n?: number;
+  lookalike_false_alarm?: number | null;
+  clean_water_false_alarm?: number | null;
   confusion: { labels: string[]; matrix: number[][] };
   feature_importance: { feature: string; importance: number }[] | null;
   pr_curve: { recall: number; precision: number }[];

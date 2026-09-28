@@ -7,7 +7,7 @@ when publishing results built on these labels.
 import requests
 
 API = "https://api.cerulean.skytruth.org/collections/public.slick_plus/items"
-FIELDS = "id,slick_timestamp,machine_confidence,hitl_cls_name,area"
+FIELDS = "id,slick_timestamp,machine_confidence,hitl_cls_name,area,s1_scene_id"
 PAGE = 500
 
 # Human-in-the-loop classes that describe real oil on the water.

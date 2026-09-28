@@ -42,13 +42,17 @@ web/                 Next.js app (static export)
   data/              events.json, model_metrics.json, meta.json  ← written by the pipeline
 pipeline/
   blacktide/         Earth Engine preprocessing, features, model
-  gee/label_tool.js  point-and-click labelling app for the EE Code Editor
+  gee/label_tool.js     point-and-click labelling app for the EE Code Editor
+  gee/review_tool.js    yes/no review of land & creek-bank candidates
   scripts/
     check_setup.py            0. verify Earth Engine access
-    generate_sample_data.py   synthetic demo data
-    sample_training.py        1. labels → training table (+ EE asset)
-    train.py                  2. RF + MLP metrics → web/data/model_metrics.json
-    detect.py                 3. monthly detection → web/data/events.json
+    bootstrap_labels.py       1. automatic labels: Cerulean slicks, clean water, look-alikes, land cover
+    find_land_candidates.py   2. vegetation die-off candidates for review (land / creek banks)
+    add_labels.py                merge reviewed labels into labels.geojson
+    sample_training.py        3. labels → water (per-pass) + land (monthly) training tables
+    train.py                  4. RF + MLP per domain → model metrics
+    detect.py                 5. water per pass + land monthly → web/data/events.json
+    generate_sample_data.py      synthetic demo data
   labels/            your labelled points (see labels/README.md)
 .github/workflows/   deploy.yml (Pages), pipeline.yml (monthly detection)
 ```
@@ -70,15 +74,17 @@ pip install -r pipeline/requirements.txt
 earthengine authenticate
 export GEE_PROJECT=your-cloud-project-id      # PowerShell: $env:GEE_PROJECT="..."
 
-python pipeline/scripts/check_setup.py         # 0. verifies access, creates the asset folder
-
-# 1. Label oil / not-oil points: paste pipeline/gee/label_tool.js into
-#    code.earthengine.google.com, click the map, save the output as
-#    pipeline/labels/labels.geojson (see labels/README.md)
-python pipeline/scripts/sample_training.py     # builds the training table + EE asset
-python pipeline/scripts/train.py               # RF + MLP metrics for the Model page
-python pipeline/scripts/detect.py --aoi pilot --start 2024-01-01 --end 2025-01-01
+python pipeline/scripts/check_setup.py              # 0. verifies access, creates the asset folder
+python pipeline/scripts/bootstrap_labels.py         # 1. ~3,000 labels with no clicking
+python pipeline/scripts/find_land_candidates.py     # 2. land / creek candidates → review in
+                                                    #    pipeline/gee/review_tool.js, then:
+python pipeline/scripts/add_labels.py reviewed.json
+python pipeline/scripts/sample_training.py          # 3. training tables + EE assets
+python pipeline/scripts/train.py                    # 4. metrics (add --publish for the website)
+python pipeline/scripts/detect.py --aoi pilot --start 2024-01-01 --end 2024-04-01 --dry-run
 ```
+
+Water and land are detected differently. Water is checked **one Sentinel-1 pass at a time**, using the wind at that moment, and is skipped when the wind is below 2 or above 12 m/s. Land uses monthly radar + optical composites. `--dry-run` writes a preview to `pipeline/output/` instead of the website.
 
 Start with `--aoi pilot` (Bodo / Ogoniland), where spills are well documented. Scale to `--aoi delta` once the metrics look trustworthy.
 
@@ -105,4 +111,5 @@ ThankGod Chinemerem Ugwuada · Ikenna Okonkwo Anthony · Tochukwu Ambrose Ngwu
 
 ## Credits
 
+Marine oil training labels come from [SkyTruth Cerulean](https://cerulean.skytruth.org) open slick detections.
 Contains modified Copernicus Sentinel data, processed in Google Earth Engine. Sentinel-2 cloudless mosaics © EOX IT Services GmbH (CC BY-NC-SA 4.0). Map data © OpenStreetMap contributors via OpenFreeMap. Population: WorldPop. Surface water: JRC Global Surface Water.
