@@ -25,7 +25,7 @@ from sklearn.neural_network import MLPClassifier  # noqa: E402
 from sklearn.pipeline import make_pipeline  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
-from blacktide.config import ALL_FEATURES, OUTPUT, RF_TREES, SCENE_FEATURES, WEB_DATA  # noqa: E402
+from blacktide.config import ALL_FEATURES, OUTPUT, RF_TREES, SCENE_FEATURES, WATER_TREES, WEB_DATA  # noqa: E402
 
 LABELS = {
     "VV": "VV backscatter", "VH": "VH backscatter", "VV_VH": "VV/VH ratio", "VV_local": "Local darkness",
@@ -88,7 +88,8 @@ def train_domain(domain: str, cols: list[str]):
     train, test = df[df.random < 0.8], df[df.random >= 0.8]
     X_tr, y_tr, X_te = train[cols], train["class"], test[cols]
 
-    rf = RandomForestClassifier(n_estimators=RF_TREES, random_state=87, n_jobs=-1).fit(X_tr, y_tr)
+    trees = WATER_TREES if domain == "water" else RF_TREES
+    rf = RandomForestClassifier(n_estimators=trees, random_state=87, n_jobs=-1).fit(X_tr, y_tr)
     rf_m = evaluate(f"rf-{domain}", "Random Forest", domain, test, rf.predict_proba(X_te)[:, 1])
     rf_m["feature_importance"] = sorted(
         ({"feature": LABELS[f], "importance": round(float(v), 4)} for f, v in zip(cols, rf.feature_importances_)),

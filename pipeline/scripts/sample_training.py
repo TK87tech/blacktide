@@ -34,6 +34,15 @@ PROPS = ["class", "date", "label_id", "source", "verified"]
 MISSING = -9999  # sampleRegions drops a point if ANY band is masked; possibly-masked bands get this instead
 
 
+def start_task(task) -> None:
+    """Start a batch task; a client-side retry of an already-accepted start is harmless."""
+    try:
+        task.start()
+    except ee.EEException as e:
+        if "already started" not in str(e):
+            raise
+
+
 def month_window(iso: str) -> tuple[str, str]:
     y, m = int(iso[:4]), int(iso[5:7])
     ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
@@ -122,7 +131,7 @@ def save(rows: list[dict], domain: str, feature_cols: list[str]) -> None:
             for r in rows
         ])
         task = ee.batch.Export.table.toAsset(fc, f"blacktide_training_{domain}", asset_id)
-        task.start()
+        start_task(task)
         print(f"  uploading to {asset_id} (task {task.id})")
 
 

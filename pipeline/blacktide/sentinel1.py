@@ -70,18 +70,31 @@ def wind_at(date: ee.Date) -> ee.Image:
     )
 
 
-def scene_features(img: ee.Image) -> ee.Image:
-    """Per-pass features for the water model.
+def scene_features(img: ee.Image, scale: int = 40) -> ee.Image:
+    """Per-pass features for the water model, computed on a fixed 40 m grid.
 
-    VV_local is darkness relative to the surrounding 1.5 km: a slick is a dark patch
-    inside brighter sea, whereas calm water is uniformly dark.
+    Averaging 10 m pixels to 40 m removes speckle by itself (16 looks), so no focal
+    filter is needed. VV_local is darkness relative to the surrounding 1.5 km: a slick
+    is a dark patch inside brighter sea, whereas calm water is uniformly dark.
+    Every step is pinned to its grid — focal filters otherwise run at whatever
+    resolution is requested, which made this ~100x more expensive.
     """
-    db = ee.Image(_prep(img))
+    interior = ee.Image.constant(1).clip(img.geometry().buffer(-5000)).unmask(0, False)
+    edge = img.select("VV").gt(-30).Or(interior)
+    linear = ee.Image(10).pow(img.select(["VV", "VH"]).divide(10)).updateMask(edge)
+    p = img.select("VV").projection()
+    lin40 = linear.reduceResolution(ee.Reducer.mean(), maxPixels=64).reproject(p.atScale(scale))
+    db = lin40.log10().multiply(10).rename(["VV", "VH"])
     vv = db.select("VV")
-    # Background brightness on a 100 m grid — a 1.5 km median at 10 m is ~100x the work
-    # for the same answer.
-    coarse = vv.reduceResolution(ee.Reducer.mean(), maxPixels=128).reproject(vv.projection().atScale(100))
-    local = vv.subtract(coarse.focalMedian(1500, "circle", "meters")).rename("VV_local")
+    p100 = p.atScale(100)
+    bg = (
+        vv.reduceResolution(ee.Reducer.mean(), maxPixels=16).reproject(p100)
+        .focalMedian(15, "circle", "pixels").reproject(p100)
+    )
     return ee.Image.cat(
-        db, local, texture(db), wind_at(img.date()), img.select("angle").rename("angle")
+        db,
+        vv.subtract(db.select("VH")).rename("VV_VH"),
+        vv.subtract(bg).rename("VV_local"),
+        wind_at(img.date()),
+        img.select("angle").rename("angle"),
     ).copyProperties(img, ["system:time_start", "system:index"])

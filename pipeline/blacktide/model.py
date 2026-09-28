@@ -7,7 +7,7 @@ Water: one per-pass model (train_water). Land: two models trained from the same 
 
 import ee
 
-from .config import ALL_FEATURES, RF_TREES, SAR_FEATURES, SCENE_FEATURES
+from .config import ALL_FEATURES, RF_TREES, SAR_FEATURES, SCENE_FEATURES, WATER_TREES
 
 
 def train(samples: ee.FeatureCollection) -> tuple[ee.Classifier, ee.Classifier]:
@@ -34,7 +34,7 @@ def probability(features: ee.Image, fused: ee.Classifier, sar_only: ee.Classifie
 def train_water(samples: ee.FeatureCollection) -> ee.Classifier:
     """Per-pass water classifier (SCENE_FEATURES)."""
     return (
-        ee.Classifier.smileRandomForest(numberOfTrees=RF_TREES, seed=87)
+        ee.Classifier.smileRandomForest(numberOfTrees=WATER_TREES, seed=87)
         .setOutputMode("PROBABILITY")
         .train(samples.filter(ee.Filter.lt("random", 0.8)).filter(ee.Filter.notNull(SCENE_FEATURES)), "class", SCENE_FEATURES)
     )
