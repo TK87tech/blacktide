@@ -72,8 +72,13 @@ def main():
             ee.data.getAsset(ASSET_ROOT)
             ok(f"{ASSET_ROOT} exists")
         except ee.EEException:
-            ee.data.createAsset({"type": "FOLDER"}, ASSET_ROOT)
-            ok(f"created {ASSET_ROOT}")
+            try:
+                ee.data.createAsset({"type": "FOLDER"}, ASSET_ROOT)
+                ok(f"created {ASSET_ROOT}")
+            except ee.EEException as e:
+                fail(f"could not create {ASSET_ROOT}: {e}")
+                print("         New projects can take a few minutes before assets work; retry shortly.")
+                failed = True
 
     print("Labels")
     labels_ready = False
