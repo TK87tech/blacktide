@@ -187,6 +187,12 @@ export default function ImageryControls({
             </div>
           )}
 
+          {!radar && [4, 5, 6, 7, 8, 9, 10].includes(Number(state.date.slice(5, 7))) && (
+            <p className="text-[11px] leading-relaxed text-st-unverified">
+              Rainy season: optical views of the Delta are mostly cloud from April to October. Radar sees through
+              cloud — or pick a November–March date.
+            </p>
+          )}
           {!radar && (
             <label className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-2">
               <input type="checkbox" checked={state.exact} onChange={(e) => onChange({ exact: e.target.checked })} className="accent-white" />

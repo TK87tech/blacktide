@@ -48,7 +48,10 @@ export function imageryTiles(layer: ImageryLayer, date: string, opts: { exact?: 
     SERVICE: "WMS", REQUEST: "GetMap", VERSION: "1.3.0", LAYERS: layer.id, CRS: "EPSG:3857",
     WIDTH: "256", HEIGHT: "256", FORMAT: "image/png", TRANSPARENT: "true", SHOWLOGO: "false", TIME: time,
   });
-  if (layer.group.startsWith("Optical") && !opts.exact) params.set("MAXCC", "40");
+  // Always send MAXCC=100: it overrides the layer's own cloud limit, which would otherwise
+  // blank the whole rainy season (Delta scenes are 75–100% cloudy Apr–Oct). The layer's
+  // "least cloud coverage" mosaicking still picks the clearest scene in the window.
+  if (layer.group.startsWith("Optical")) params.set("MAXCC", "100");
   if (opts.nonce) params.set("_r", String(opts.nonce)); // forces a fresh fetch on "Reload"
   // {bbox-epsg-3857} is filled in by MapLibre and must stay unencoded.
   return `https://sh.dataspace.copernicus.eu/ogc/wms/${CDSE_INSTANCE}?${params}&BBOX={bbox-epsg-3857}`;
