@@ -69,7 +69,12 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
   const [colorBy, setColorBy] = useState<ColorBy>("source");
   const [base, setBase] = useState<Base>("dark");
   const [selected, setSelected] = useState<SpillEvent | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false); // mobile only; always shown from md up
+  // Open by default on desktop, closed on phones; the edge tab slides it away either way.
+  const [panelOpen, setPanelOpen] = useState(true);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- start closed on phones, after hydration
+    if (window.innerWidth < 768) setPanelOpen(false);
+  }, []);
   const [img, setImg] = useState<ImageryState>(() => ({
     layerId: "none",
     date: events.reduce((m, e) => (e.date > m ? e.date : m), "2024-01-01"),
@@ -286,14 +291,15 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
       <div className="absolute inset-0"><div ref={container} className="h-full w-full" /></div>
 
       {/* Control panel */}
-      <button
-        onClick={() => setPanelOpen((o) => !o)}
-        className="absolute left-3 top-3 z-20 rounded-md border border-line bg-surface px-3 py-1.5 text-xs text-ink-2 md:hidden"
+      <div
+        className={`absolute left-3 top-3 bottom-3 z-10 flex items-start transition-transform duration-300 ease-out ${
+          panelOpen ? "translate-x-0" : "-translate-x-[312px]"
+        }`}
       >
-        {panelOpen ? "Hide filters" : "Filters"}
-      </button>
-      {(
-        <aside className={`card absolute left-3 top-12 z-10 ${panelOpen ? "block" : "hidden"} md:block max-h-[calc(100%-4.5rem)] w-[300px] overflow-y-auto p-4 shadow-2xl md:top-3`}>
+        <aside
+          aria-hidden={!panelOpen}
+          className="card max-h-full w-[300px] overflow-y-auto p-4 shadow-2xl"
+        >
           <div className="flex items-baseline justify-between">
             <h1 className="text-sm font-semibold">Oil spill detections</h1>
             <span className="text-xs text-muted">Sentinel-1 · Sentinel-2</span>
@@ -442,7 +448,17 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
             Circle size is proportional to detected area. Hover for details, click to inspect.
           </p>
         </aside>
-      )}
+        <button
+          onClick={() => setPanelOpen((o) => !o)}
+          aria-label={panelOpen ? "Hide panel" : "Show panel"}
+          title={panelOpen ? "Hide panel" : "Show panel"}
+          className="ml-1.5 mt-2 flex h-12 w-6 items-center justify-center rounded-r-md border border-l-0 border-line bg-surface text-ink-2 shadow-xl hover:bg-surface-2 hover:text-ink"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className={`transition-transform duration-300 ${panelOpen ? "" : "rotate-180"}`}>
+            <path d="M8 2 4 6l4 4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
 
       {/* Detail drawer */}
       {selected && (
