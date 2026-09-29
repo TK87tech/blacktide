@@ -88,7 +88,7 @@ export default function MethodPage() {
         ))}
       </ul>
 
-      <h2 className="mt-10 text-lg font-semibold">Built entirely on free and open tools</h2>
+      <h2 className="mt-10 text-lg font-semibold">Tools built on</h2>
       <table className="mt-3 w-full text-sm">
         <tbody>
           {STACK.map(([k, v]) => (
