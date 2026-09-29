@@ -61,18 +61,38 @@ function LegendRow({ items }: { items: { label: string; color: string }[] }) {
   );
 }
 
-export function YearlyChart({ data }: { data: { year: string; water: number; land: number }[] }) {
+export function YearlyChart({
+  data,
+  series = [
+    { key: "water", label: "Water", color: C.water },
+    { key: "land", label: "Land", color: C.land },
+  ],
+}: {
+  data: Record<string, string | number>[];
+  series?: { key: string; label: string; color: string }[];
+}) {
   return (
     <div>
-      <LegendRow items={[{ label: "Water", color: C.water }, { label: "Land", color: C.land }]} />
+      <LegendRow items={series.map((s) => ({ label: s.label, color: s.color }))} />
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
           <CartesianGrid vertical={false} stroke={C.grid} />
           <XAxis dataKey="year" {...axis} />
           <YAxis {...axis} axisLine={false} allowDecimals={false} />
           <Tooltip content={<Tip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-          <Bar dataKey="water" name="Water" stackId="s" fill={C.water} stroke={C.surface} strokeWidth={2} maxBarSize={36} />
-          <Bar dataKey="land" name="Land" stackId="s" fill={C.land} stroke={C.surface} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={36} />
+          {series.map((s, i) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              name={s.label}
+              stackId="s"
+              fill={s.color}
+              stroke={C.surface}
+              strokeWidth={2}
+              maxBarSize={36}
+              radius={i === series.length - 1 ? [4, 4, 0, 0] : undefined}
+            />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     </div>

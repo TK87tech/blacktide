@@ -10,6 +10,8 @@ export const C = {
   water: "#3987e5", // categorical slot 1
   land: "#d95926", // categorical slot 2
   seq: ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#104281"],
+  // categorical slots 1–3, one per data source
+  source: { cerulean: "#3987e5", nosdra: "#d95926", blacktide: "#199e70" },
   status: {
     verified: "#d03b3b", // critical
     unverified: "#fab219", // warning

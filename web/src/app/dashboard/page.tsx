@@ -3,7 +3,8 @@ import Card from "@/components/Card";
 import { SeasonChart, StateChart, YearlyChart } from "@/components/charts";
 import { getEvents, getMeta } from "@/lib/data";
 import { fmtCompact, fmtDate, fmtInt, fmtPct } from "@/lib/format";
-import { byState, byYear, hotspots, seasonality, summary } from "@/lib/stats";
+import { byState, byYearSource, hotspots, seasonality, summary } from "@/lib/stats";
+import { C } from "@/lib/theme";
 
 export const metadata = { title: "Dashboard — BlackTide" };
 
@@ -11,13 +12,14 @@ export default function Dashboard() {
   const events = getEvents();
   const meta = getMeta();
   const s = summary(events);
-  // Slick areas can't be summed: a persistent sheen is seen on many passes.
-  const areas = events.filter((e) => e.status !== "false_positive").map((e) => e.area_ha).sort((a, b) => a - b);
-  const medianArea = areas.length ? areas[Math.floor(areas.length / 2)] : 0;
-  const maxArea = areas.length ? areas[areas.length - 1] : 0;
-  const coverageNote = events.some((e) => e.source === "cerulean")
-    ? "Marine coverage by SkyTruth Cerulean expanded sharply in 2023 — earlier years are incomplete, not quieter."
-    : "Verified and unverified detections, by surface";
+  const cer = events.filter((e) => e.source === "cerulean");
+  const nos = events.filter((e) => e.source === "nosdra");
+  const nosLand = nos.filter((e) => e.surface === "land");
+  const scored = nosLand.filter((e) => e.sat_impact && e.sat_impact !== "no clear imagery" && e.sat_impact !== "pending");
+  const visible = scored.filter((e) => e.sat_impact === "clear vegetation damage");
+  const barrels = nos.reduce((a, e) => a + (e.volume_bbl ?? 0), 0);
+  const coverageNote =
+    "Official reports (NOSDRA) cover land, swamp and creeks; SkyTruth Cerulean's marine coverage expanded sharply in 2023, so earlier marine years are incomplete.";
   const season = seasonality(events);
   const dryAvg = season.filter((m) => m.dry).reduce((a, m) => a + m.avg, 0) / 5;
   const wetAvg = season.filter((m) => !m.dry).reduce((a, m) => a + m.avg, 0) / 7;
@@ -36,57 +38,65 @@ export default function Dashboard() {
       </header>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Detections" value={fmtInt(s.detections)} sub={`${fmtInt(s.falsePositives)} ruled out as false positives`} />
         <Tile
-          label="Verified spills"
-          value={fmtInt(s.verified)}
-          sub={`${fmtPct(s.verified / Math.max(s.detections, 1))} of detections · ${fmtInt(s.unverified)} awaiting review`}
+          label="Events"
+          value={fmtInt(s.detections)}
+          sub={`${fmtInt(nos.length)} official reports · ${fmtInt(cer.length)} marine slicks`}
         />
         <Tile
-          label="Median spill size"
-          value={`${fmtCompact(medianArea)} ha`}
-          sub={`largest ${fmtCompact(maxArea)} ha${s.mangroveHa > 0 ? ` · ${fmtCompact(s.mangroveHa)} ha of mangrove touched` : ""}`}
+          label="Land, swamp & creek reports"
+          value={fmtInt(nosLand.length + nos.filter((e) => e.habitat?.startsWith("Inland water")).length)}
+          sub={`${fmtPct(nos.filter((e) => e.cause?.startsWith("Sabotage")).length / Math.max(nos.length, 1))} attributed to sabotage / theft`}
         />
-        {events.some((e) => e.nosdra_match !== null) ? (
-          <Tile
-            label="Not in official records"
-            value={fmtInt(s.unreported)}
-            sub="verified spills with no matching NOSDRA report"
-          />
-        ) : (
-          <Tile
-            label="People near a spill"
-            value={fmtCompact(events.filter((e) => e.status !== "false_positive").reduce((a, e) => Math.max(a, e.people_5km), 0))}
-            sub="most people living within 5 km of a single detection"
-          />
-        )}
+        <Tile
+          label="Visible from space"
+          value={scored.length ? fmtPct(visible.length / scored.length) : "—"}
+          sub={
+            scored.length
+              ? `${fmtInt(visible.length)} of ${fmtInt(scored.length)} checked land reports show clear vegetation damage`
+              : "satellite check of reported land spills in progress — 23% in the pilot test"
+          }
+        />
+        <Tile
+          label="Oil reported spilled"
+          value={`${fmtCompact(barrels)} bbl`}
+          sub={`across official reports · ${fmtInt(cer.filter((e) => e.status === "verified").length)} marine slicks reviewed by people`}
+        />
       </section>
 
       <section className="mt-3 grid gap-3 lg:grid-cols-2">
         <Card title="Spills per year" desc={coverageNote}>
-          <YearlyChart data={byYear(events)} />
+          <YearlyChart
+            data={byYearSource(events)}
+            series={[
+              { key: "nosdra", label: "Official reports (NOSDRA)", color: C.source.nosdra },
+              { key: "cerulean", label: "Marine slicks (Cerulean)", color: C.source.cerulean },
+              ...(events.some((e) => !e.source || e.source === "blacktide")
+                ? [{ key: "blacktide", label: "BlackTide", color: C.source.blacktide }]
+                : []),
+            ]}
+          />
         </Card>
         <Card
           title="Seasonality"
-          desc={`Dry-season months average ${(dryAvg / Math.max(wetAvg, 0.01)).toFixed(1)}× the detections of wet-season months`}
+          desc={`Average events per calendar month. Dry-season months (Nov–Mar) average ${(dryAvg / Math.max(wetAvg, 0.01)).toFixed(1)}× the wet-season months.`}
         >
           <SeasonChart data={season} />
         </Card>
       </section>
 
       <section className="mt-3 grid gap-3 lg:grid-cols-5">
-        <Card title="By state" desc="Detections, excluding false positives" className="lg:col-span-2">
+        <Card title="By state" desc="All events; offshore reports and slicks are grouped by the nearest state" className="lg:col-span-2">
           <StateChart data={byState(events)} />
         </Card>
-        <Card title="Hotspots" desc="Locations with the most recurring detections" className="lg:col-span-3">
+        <Card title="Hotspots" desc="LGAs and offshore areas with the most events" className="lg:col-span-3">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-muted">
                   <th className="py-2 font-medium">Location</th>
                   <th className="py-2 font-medium">State</th>
-                  <th className="py-2 text-right font-medium">Detections</th>
-                  <th className="py-2 text-right font-medium">Area (ha)</th>
+                  <th className="py-2 text-right font-medium">Events</th>
                   <th className="py-2 text-right font-medium">Latest</th>
                 </tr>
               </thead>
@@ -99,7 +109,6 @@ export default function Dashboard() {
                     </td>
                     <td className="py-2 text-ink-2">{h.state}</td>
                     <td className="py-2 text-right">{h.count}</td>
-                    <td className="py-2 text-right text-ink-2">{fmtInt(h.area)}</td>
                     <td className="py-2 text-right text-ink-2">{fmtDate(h.last)}</td>
                   </tr>
                 ))}

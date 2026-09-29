@@ -30,6 +30,19 @@ export function byYear(events: SpillEvent[]) {
   return [...m.values()].sort((a, b) => a.year.localeCompare(b.year));
 }
 
+/** Events per year, split by data source. */
+export function byYearSource(events: SpillEvent[]) {
+  const m = new Map<string, Record<string, string | number>>();
+  for (const e of events.filter(isSpill)) {
+    const y = e.date.slice(0, 4);
+    const row = m.get(y) ?? { year: y, cerulean: 0, nosdra: 0, blacktide: 0 };
+    const k = e.source ?? "blacktide";
+    row[k] = (row[k] as number) + 1;
+    m.set(y, row);
+  }
+  return [...m.values()].sort((a, b) => String(a.year).localeCompare(String(b.year)));
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** Average detections per calendar month — the seasonal signal. */
@@ -59,13 +72,14 @@ export function byState(events: SpillEvent[]) {
   return [...m.values()].sort((a, b) => b.count - a.count);
 }
 
-/** "Offshore, 23 km from Forcados" → "Offshore near Forcados", so offshore slicks group together. */
-export const hotspotName = (site: string) => site.replace(/^Offshore, \d+ km from /, "Offshore near ");
+/** Group key: LGA where known (official reports), else the site; offshore slicks by nearest place. */
+export const hotspotName = (e: SpillEvent) =>
+  e.site.startsWith("Offshore") || !e.lga ? e.site.replace(/^Offshore, \d+ km from /, "Offshore near ") : `${e.lga} LGA`;
 
 export function hotspots(events: SpillEvent[], limit = 8) {
   const m = new Map<string, { site: string; lga: string; state: string; count: number; area: number; last: string }>();
   for (const e of events.filter(isSpill)) {
-    const site = hotspotName(e.site);
+    const site = hotspotName(e);
     const row = m.get(site) ?? { site, lga: e.lga, state: e.state, count: 0, area: 0, last: e.date };
     row.count++;
     row.area += e.area_ha;

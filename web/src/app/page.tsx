@@ -1,8 +1,5 @@
-import MapExplorer from "@/components/MapExplorer";
-import { getEvents } from "@/lib/data";
-import { monthRange } from "@/lib/stats";
+import MapLoader from "@/components/MapLoader";
 
 export default function Home() {
-  const events = getEvents();
-  return <MapExplorer events={events} months={monthRange(events)} />;
+  return <MapLoader />;
 }

@@ -11,9 +11,11 @@ import type { SpillEvent, Status, Surface } from "@/lib/types";
 import ImageryControls, { type ImageryState, syncImagery, useImageryStatus } from "./ImageryControls";
 import StatusBadge from "./StatusBadge";
 import { IMAGERY_LAYERS, IMAGERY_MIN_ZOOM } from "@/lib/imagery";
+import { eventHref } from "@/lib/useEvents";
 
 type Mode = "points" | "heat";
-type ColorBy = "surface" | "status";
+type ColorBy = "surface" | "status" | "source";
+const SOURCES = ["cerulean", "nosdra", "blacktide"] as const;
 type Base = "dark" | "satellite";
 
 const WINDOWS = [
@@ -26,7 +28,9 @@ const WINDOWS = [
 const colorExpr = (by: ColorBy) =>
   (by === "surface"
     ? ["match", ["get", "surface"], "water", C.water, C.land]
-    : ["match", ["get", "status"], "verified", C.status.verified, "unverified", C.status.unverified, C.status.false_positive]) as never;
+    : by === "source"
+      ? ["match", ["get", "source"], "cerulean", C.source.cerulean, "nosdra", C.source.nosdra, C.source.blacktide]
+      : ["match", ["get", "status"], "verified", C.status.verified, "unverified", C.status.unverified, C.status.false_positive]) as never;
 
 function toGeoJSON(events: SpillEvent[]): GeoJSON.FeatureCollection {
   return {
@@ -35,7 +39,7 @@ function toGeoJSON(events: SpillEvent[]): GeoJSON.FeatureCollection {
       type: "Feature",
       id: e.id,
       geometry: { type: "Point", coordinates: [e.lon, e.lat] },
-      properties: { id: e.id, surface: e.surface, status: e.status, area_ha: e.area_ha, confidence: e.confidence },
+      properties: { id: e.id, surface: e.surface, status: e.status, area_ha: e.area_ha, confidence: e.confidence, source: e.source ?? "blacktide" },
     })),
   };
 }
@@ -55,8 +59,14 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
     false_positive: false,
   });
   const [minConf, setMinConf] = useState(0.5);
+  const [sources, setSources] = useState<Record<string, boolean>>({ cerulean: true, nosdra: true, blacktide: true });
+  const sourceCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const e of events) c[e.source ?? "blacktide"] = (c[e.source ?? "blacktide"] ?? 0) + 1;
+    return c;
+  }, [events]);
   const [mode, setMode] = useState<Mode>("points");
-  const [colorBy, setColorBy] = useState<ColorBy>("surface");
+  const [colorBy, setColorBy] = useState<ColorBy>("source");
   const [base, setBase] = useState<Base>("dark");
   const [selected, setSelected] = useState<SpillEvent | null>(null);
   const [panelOpen, setPanelOpen] = useState(false); // mobile only; always shown from md up
@@ -100,10 +110,11 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
           inTime &&
           surfaces[e.surface] &&
           statuses[e.status] &&
+          sources[e.source ?? "blacktide"] &&
           e.confidence >= minConf
         );
       }),
-    [events, startMonth, endMonth, surfaces, statuses, minConf, imgWindow, matchImagery],
+    [events, startMonth, endMonth, surfaces, statuses, sources, minConf, imgWindow, matchImagery],
   );
   const verifiedCount = useMemo(() => filtered.filter((e) => e.status === "verified").length, [filtered]);
 
@@ -190,8 +201,8 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
           .setHTML(
             `<div style="font-size:12px;line-height:1.5">
               <div style="font-weight:600">${e.site}</div>
-              <div style="color:${C.ink2}">${fmtDate(e.date)} · ${e.surface === "water" ? "Water" : "Land"}</div>
-              <div class="tabular">${fmt1(e.area_ha)} ha · ${fmtPct(e.confidence)} confidence</div>
+              <div style="color:${C.ink2}">${fmtDate(e.date)} · ${e.surface === "water" ? "Water" : "Land"} · ${sourceLabel(e.source)}</div>
+              <div class="tabular">${e.source === "nosdra" ? `${e.cause ?? "Reported spill"}${e.volume_bbl != null ? ` · ${fmt1(e.volume_bbl)} bbl` : ""}` : `${fmt1(e.area_ha)} ha · ${fmtPct(e.confidence)} confidence`}</div>
             </div>`,
           )
           .addTo(map);
@@ -334,6 +345,18 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
             />
           </Section>
 
+          <Section title="Source">
+            {SOURCES.filter((s) => sourceCounts[s]).map((s) => (
+              <Check
+                key={s}
+                checked={sources[s]}
+                onChange={(v) => setSources({ ...sources, [s]: v })}
+                swatch={colorBy === "source" ? C.source[s] : undefined}
+                label={`${s === "cerulean" ? "Sea & coast — SkyTruth Cerulean" : s === "nosdra" ? "Official reports — NOSDRA" : "BlackTide detections"} (${fmtInt(sourceCounts[s])})`}
+              />
+            ))}
+          </Section>
+
           <Section title="Surface">
             {(["water", "land"] as Surface[]).map((s) => (
               <Check
@@ -385,8 +408,9 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
                 value={colorBy}
                 onChange={setColorBy}
                 options={[
-                  { value: "surface", label: "Colour: surface" },
-                  { value: "status", label: "Colour: status" },
+                  { value: "source", label: "Source" },
+                  { value: "surface", label: "Surface" },
+                  { value: "status", label: "Status" },
                 ]}
               />
             )}
@@ -439,17 +463,24 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
             <StatusBadge status={selected.status} />
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-            <Stat label="Detected by" value={sourceLabel(selected.source)} />
-            <Stat label="Surface" value={selected.surface === "water" ? "Water" : "Land"} />
-            <Stat label="Area" value={`${fmt1(selected.area_ha)} ha`} />
-            <Stat label="Confidence" value={fmtPct(selected.confidence)} />
-            <Stat label="Sensors" value={selected.sensors.join(" + ")} />
-            <Stat label="People within 5 km" value={fmtInt(selected.people_5km)} />
-            <Stat label="Mangrove affected" value={`${fmt1(selected.mangrove_ha)} ha`} />
-            <Stat
-              label="In NOSDRA records"
-              value={selected.nosdra_match === null ? "—" : selected.nosdra_match ? "Yes" : "No — unreported"}
-            />
+            <Stat label="Source" value={sourceLabel(selected.source)} />
+            {selected.source === "nosdra" ? (
+              <>
+                <Stat label="Habitat" value={selected.habitat ?? "—"} />
+                <Stat label="Cause (reported)" value={selected.cause ?? "—"} />
+                <Stat label="Volume (reported)" value={selected.volume_bbl != null ? `${fmt1(selected.volume_bbl)} bbl` : "—"} />
+                <Stat label="Operator" value={selected.operator || "—"} />
+                <Stat label="Satellite check" value={selected.sat_impact ?? (selected.surface === "water" ? "n/a (water)" : "not scored")} />
+              </>
+            ) : (
+              <>
+                <Stat label="Surface" value={selected.surface === "water" ? "Water" : "Land"} />
+                <Stat label="Area" value={`${fmt1(selected.area_ha)} ha`} />
+                <Stat label="Confidence" value={fmtPct(selected.confidence)} />
+                <Stat label="People within 5 km" value={fmtInt(selected.people_5km)} />
+                <Stat label="Mangrove affected" value={`${fmt1(selected.mangrove_ha)} ha`} />
+              </>
+            )}
           </dl>
           <div className="mt-4 flex gap-2">
             <button
@@ -459,7 +490,7 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
               Zoom to
             </button>
             <Link
-              href={`/events/${selected.id}/`}
+              href={eventHref(selected.id)}
               className="flex-1 rounded-md bg-white px-3 py-1.5 text-center text-sm font-medium text-black"
             >
               Full details →

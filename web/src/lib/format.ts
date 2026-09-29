@@ -19,7 +19,12 @@ export function fmtMonth(ym: string) {
   });
 }
 
-export const sourceLabel = (source?: string) => (source === "cerulean" ? "SkyTruth Cerulean" : "BlackTide model");
+export const SOURCE_LABEL: Record<string, string> = {
+  cerulean: "SkyTruth Cerulean",
+  nosdra: "NOSDRA report",
+  blacktide: "BlackTide model",
+};
+export const sourceLabel = (source?: string) => SOURCE_LABEL[source ?? "blacktide"] ?? "BlackTide model";
 
 export const STATUS_LABEL = {
   verified: "Verified spill",

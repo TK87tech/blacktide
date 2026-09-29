@@ -5,13 +5,14 @@
 *Marée noire* (black tide) is the French term for an oil spill. BlackTide watches the whole Niger Delta from orbit:
 
 - **Sea & coast:** oil slicks detected on every Sentinel-1 radar pass by [SkyTruth Cerulean](https://cerulean.skytruth.org), imported and enriched with nearby-population and mangrove context.
-- **Land, creeks & estuaries** (where Cerulean doesn't look): BlackTide's own pipeline finds sudden vegetation die-off on Sentinel-2, has analysts confirm candidates, and trains a Random Forest on Sentinel-1 + Sentinel-2 features.
+- **Land, swamp & creeks:** every spill reported to NOSDRA (Nigerian Oil Spill Monitor) since 2015, with a **satellite check** of whether each land spill left visible vegetation damage (Sentinel-2 NDVI + Sentinel-1 radar, site vs surroundings, dry season before vs after).
+- **In development:** BlackTide's own inland detector (SAR + optical change detection, trained on the satellite-visible reported spills).
 
 Every detection is published on an open map and dashboard.
 
 It runs entirely on free tools and free tiers: no servers and no paid APIs.
 
-> The site now shows **real marine detections** (SkyTruth Cerulean). Land & creek detections appear once enough candidate sites have been reviewed.
+> The site shows **real data**: ~2,900 marine slicks (SkyTruth Cerulean) and ~9,000 official spill reports (NOSDRA).
 
 ## What's in the app
 
@@ -59,6 +60,9 @@ pipeline/
     sample_training.py        3. labels → water (per-pass) + land (monthly) training tables
     train.py                  4. RF + MLP per domain → model metrics
     import_cerulean.py           marine events from SkyTruth Cerulean → web/data/events.json
+    import_nosdra.py             official NOSDRA spill reports → web/data/events.json
+    score_nosdra_impact.py       satellite impact score for reported land spills
+    test_known_sites.py          sensitivity test: do reported spills show up from space?
     detect.py                 5. land model monthly (+ --water research model) → web/data/events.json
     generate_sample_data.py      synthetic demo data
   labels/            your labelled points (see labels/README.md)
@@ -120,5 +124,5 @@ ThankGod Chinemerem Ugwuada · Ikenna Okonkwo Anthony · Tochukwu Ambrose Ngwu
 
 ## Credits
 
-Marine oil training labels come from [SkyTruth Cerulean](https://cerulean.skytruth.org) open slick detections.
+Marine slick detections and training labels: [SkyTruth Cerulean](https://cerulean.skytruth.org). Official spill reports: National Oil Spill Detection and Response Agency (NOSDRA), [Nigerian Oil Spill Monitor](https://nosdra.oilspillmonitor.ng/). State and LGA boundaries: [geoBoundaries](https://www.geoboundaries.org) (CC BY 4.0).
 Contains modified Copernicus Sentinel data, processed in Google Earth Engine. Sentinel-2 cloudless mosaics © EOX IT Services GmbH (CC BY-NC-SA 4.0). Map data © OpenStreetMap contributors via OpenFreeMap. Population: WorldPop. Surface water: JRC Global Surface Water.

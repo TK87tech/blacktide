@@ -9,11 +9,11 @@ const CLS: Record<Status, string> = {
   false_positive: "text-st-fp border-st-fp/40 bg-st-fp/10",
 };
 
-export default function StatusBadge({ status }: { status: Status }) {
+export default function StatusBadge({ status, label }: { status: Status; label?: string }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${CLS[status]}`}>
       <span aria-hidden>{ICON[status]}</span>
-      {STATUS_LABEL[status]}
+      {label ?? STATUS_LABEL[status]}
     </span>
   );
 }

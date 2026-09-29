@@ -57,6 +57,8 @@ jobs:
           else
             python pipeline/scripts/import_cerulean.py --no-enrich
           fi
+      - name: Import official spill reports (NOSDRA)
+        run: python pipeline/scripts/import_nosdra.py --download
       - name: Detect land & creek spills
         if: steps.creds.outputs.ok == 'true'
         run: |

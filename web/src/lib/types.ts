@@ -30,8 +30,17 @@ export interface SpillEvent {
   /** "cerulean" for SkyTruth Cerulean imports; absent for BlackTide's own models. */
   source?: string;
   source_url?: string;
-  /** Cerulean's reviewed source category, e.g. "Infrastructure", "Vessel". */
+  /** Cerulean: reviewed source category ("Infrastructure", "Vessel"); NOSDRA: reported cause. */
   cause?: string | null;
+  /** NOSDRA reports */
+  operator?: string;
+  volume_bbl?: number | null;
+  habitat?: string;
+  incident_number?: string;
+  /** Satellite check of a reported land spill: local vegetation die-back vs surroundings. */
+  sat_impact?: "clear vegetation damage" | "possible damage" | "not visible" | "no clear imagery" | "pending";
+  sat_local_dndvi?: number | null;
+  sat_local_dvh?: number | null;
   features: EventFeatures;
   lon: number;
   lat: number;

@@ -8,26 +8,31 @@ const STEPS = [
   },
   {
     n: "02",
-    title: "Land, creeks & estuaries: BlackTide",
-    body: "Cerulean doesn't cover inland areas, so BlackTide looks for what oil does there: it kills vegetation. Dry-season Sentinel-2 NDVI is compared year on year to find sudden die-off of healthy mangrove, swamp forest and farmland, flagging patches beside creeks.",
+    title: "Land, swamp & creeks: official reports",
+    body: "Every spill reported to NOSDRA since 2015 (Nigerian Oil Spill Monitor, from Joint Investigation Visits) is mapped with its operator, reported cause, volume and habitat. For land and swamp reports, BlackTide checks from space whether the spill left visible damage: vegetation change at the site (100 m) against its surroundings (300–1,000 m), dry season before vs after, on Sentinel-2 NDVI and Sentinel-1 radar. Tested on 133 reports vs 139 spill-free points: clear local die-back at 23% of reported spills and 1% of controls.",
   },
   {
     n: "03",
+    title: "Land, creeks & estuaries: BlackTide detection (in development)",
+    body: "Cerulean doesn't cover inland areas, so BlackTide looks for what oil does there: it kills vegetation. Dry-season Sentinel-2 NDVI is compared year on year to find sudden die-off of healthy mangrove, swamp forest and farmland, flagging patches beside creeks.",
+  },
+  {
+    n: "04",
     title: "Human review",
     body: "Die-off has other causes too (clearing, fire, flooding), so each candidate is checked by an analyst on before/after imagery. Confirmed and rejected sites both become training labels.",
   },
   {
-    n: "04",
+    n: "05",
     title: "Land model",
     body: "A Random Forest trained on those labels uses monthly Sentinel-1 radar (which sees through cloud) and Sentinel-2 indices — NDVI change, NDWI, MNDWI, the Oil Spill Index — with a radar-only fallback when clouds hide every optical scene.",
   },
   {
-    n: "05",
+    n: "06",
     title: "Research comparison",
     body: "BlackTide's own marine models (Random Forest and a neural network on per-pass radar, local darkness, wind and incidence angle) are trained on Cerulean's reviewed slicks and reported on the Model page — but not used for the map, because pixel-level models raise too many false alarms over open sea.",
   },
   {
-    n: "06",
+    n: "07",
     title: "Validate & repeat",
     body: "Everything runs on free tools. A monthly GitHub Action imports new Cerulean slicks, runs the land model and republishes the site.",
   },
@@ -36,6 +41,8 @@ const STEPS = [
 const STACK = [
   ["Satellite processing", "Google Earth Engine (free, non-commercial)"],
   ["Marine detections", "SkyTruth Cerulean (open Sentinel-1 slick detections)"],
+  ["Official spill reports", "NOSDRA — Nigerian Oil Spill Monitor"],
+  ["Administrative boundaries", "geoBoundaries (states and LGAs)"],
   ["Machine learning", "Earth Engine smileRandomForest · scikit-learn"],
   ["Automation", "GitHub Actions (scheduled monthly run)"],
   ["Web app", "Next.js static export · MapLibre GL · Recharts"],
@@ -98,7 +105,7 @@ export default function MethodPage() {
         ThankGod Chinemerem Ugwuada · Ikenna Okonkwo Anthony · Tochukwu Ambrose Ngwu
       </p>
       <p className="mt-6 text-xs text-muted">
-        Marine and coastal slick detections: SkyTruth Cerulean (cerulean.skytruth.org). Contains modified Copernicus Sentinel data. Sentinel-2 cloudless mosaics © EOX IT Services GmbH, CC BY-NC-SA 4.0.
+        Marine and coastal slick detections: SkyTruth Cerulean (cerulean.skytruth.org). Official spill reports: National Oil Spill Detection and Response Agency (NOSDRA), Nigerian Oil Spill Monitor (oilspillmonitor.ng). Boundaries: geoBoundaries (CC BY 4.0). Contains modified Copernicus Sentinel data. Sentinel-2 cloudless mosaics © EOX IT Services GmbH, CC BY-NC-SA 4.0.
       </p>
     </div>
   );

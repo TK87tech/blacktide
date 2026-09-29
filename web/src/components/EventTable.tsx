@@ -2,18 +2,28 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { fmt1, fmtDate, fmtPct, STATUS_LABEL } from "@/lib/format";
+import { fmt1, fmtDate, STATUS_LABEL } from "@/lib/format";
 import type { SpillEvent, Status } from "@/lib/types";
+import Loading from "./Loading";
 import StatusBadge from "./StatusBadge";
+import { eventHref, useEvents } from "@/lib/useEvents";
+import { SOURCE_LABEL, sourceLabel } from "@/lib/format";
 
 type SortKey = "date" | "area_ha" | "confidence" | "site";
 const PAGE = 25;
 
-export default function EventTable({ events }: { events: SpillEvent[] }) {
+export default function EventTable() {
+  const { events, error } = useEvents();
+  if (!events) return <Loading error={error} />;
+  return <Table events={events} />;
+}
+
+function Table({ events }: { events: SpillEvent[] }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<Status | "all">("all");
   const [state, setState] = useState("all");
   const [surface, setSurface] = useState<"all" | "water" | "land">("all");
+  const [source, setSource] = useState("all");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "date", dir: -1 });
   const [page, setPage] = useState(0);
 
@@ -27,13 +37,14 @@ export default function EventTable({ events }: { events: SpillEvent[] }) {
           (status === "all" || e.status === status) &&
           (state === "all" || e.state === state) &&
           (surface === "all" || e.surface === surface) &&
+          (source === "all" || (e.source ?? "blacktide") === source) &&
           (!needle || `${e.id} ${e.site} ${e.lga} ${e.state}`.toLowerCase().includes(needle)),
       )
       .sort((a, b) => {
         const av = a[sort.key], bv = b[sort.key];
         return (av < bv ? -1 : av > bv ? 1 : 0) * sort.dir;
       });
-  }, [events, q, status, state, surface, sort]);
+  }, [events, q, status, state, surface, source, sort]);
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const view = rows.slice(page * PAGE, page * PAGE + PAGE);
@@ -44,7 +55,7 @@ export default function EventTable({ events }: { events: SpillEvent[] }) {
   };
 
   const downloadCsv = () => {
-    const cols = ["id", "date", "site", "lga", "state", "surface", "area_ha", "confidence", "status", "lat", "lon"] as const;
+    const cols = ["id", "date", "source", "site", "lga", "state", "surface", "area_ha", "status", "cause", "operator", "volume_bbl", "sat_impact", "lat", "lon"] as const;
     const csv = [cols.join(","), ...rows.map((r) => cols.map((c) => JSON.stringify(r[c] ?? "")).join(","))].join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = Object.assign(document.createElement("a"), { href: url, download: "blacktide-events.csv" });
@@ -89,6 +100,12 @@ export default function EventTable({ events }: { events: SpillEvent[] }) {
           <option value="water">Water</option>
           <option value="land">Land</option>
         </select>
+        <select value={source} onChange={(e) => reset(setSource)(e.target.value)} className={select}>
+          <option value="all">All sources</option>
+          {Object.entries(SOURCE_LABEL).filter(([k]) => events.some((e) => (e.source ?? "blacktide") === k)).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
         <button onClick={downloadCsv} className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-2 hover:bg-white/5">
           Export CSV
         </button>
@@ -103,7 +120,7 @@ export default function EventTable({ events }: { events: SpillEvent[] }) {
               {th("site", "Location")}
               <th className="py-2 font-medium">Surface</th>
               {th("area_ha", "Area (ha)", true)}
-              {th("confidence", "Confidence", true)}
+              <th className="py-2 font-medium">Source</th>
               <th className="py-2 font-medium">Status</th>
             </tr>
           </thead>
@@ -111,7 +128,7 @@ export default function EventTable({ events }: { events: SpillEvent[] }) {
             {view.map((e) => (
               <tr key={e.id} className="border-b border-line/50 hover:bg-white/[0.03]">
                 <td className="py-2">
-                  <Link href={`/events/${e.id}/`} className="text-ink-2 underline decoration-line underline-offset-2 hover:text-ink">
+                  <Link href={eventHref(e.id)} className="text-ink-2 underline decoration-line underline-offset-2 hover:text-ink">
                     {e.id}
                   </Link>
                 </td>
@@ -126,8 +143,11 @@ export default function EventTable({ events }: { events: SpillEvent[] }) {
                   </span>
                 </td>
                 <td className="py-2 text-right">{fmt1(e.area_ha)}</td>
-                <td className="py-2 text-right text-ink-2">{fmtPct(e.confidence)}</td>
-                <td className="py-2"><StatusBadge status={e.status} /></td>
+                <td className="py-2 text-ink-2">
+                  {sourceLabel(e.source)}
+                  {e.sat_impact === "clear vegetation damage" && <span className="ml-1 text-xs text-st-verified" title="Satellite shows clear vegetation damage">● visible</span>}
+                </td>
+                <td className="py-2"><StatusBadge status={e.status} label={e.source === "nosdra" ? "Official report" : undefined} /></td>
               </tr>
             ))}
             {!view.length && (
