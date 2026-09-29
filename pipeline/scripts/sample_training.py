@@ -157,6 +157,8 @@ def main():
         feat = {"type": "Feature", "geometry": f["geometry"], "properties": props}
         if p.get("scene"):
             water[p["scene"]].append(feat)
+        elif p.get("kind") == "creek":
+            continue  # creek-water labels without a pass id: kept for a future creek model, not land
         else:
             land[month_window(p["date"])].append(feat)
     print(f"{len(labels)} labels: {sum(map(len, water.values()))} water across {len(water)} passes, "
