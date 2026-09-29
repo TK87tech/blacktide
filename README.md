@@ -52,7 +52,9 @@ pipeline/
   scripts/
     check_setup.py            0. verify Earth Engine access
     bootstrap_labels.py       1. automatic labels: Cerulean slicks, clean water, look-alikes, land cover
-    find_land_candidates.py   2. vegetation die-off candidates for review (land / creek banks)
+    detect_inland.py          2. SAR + optical change detection: land / creek-bank die-off and creek slicks
+    export_review.py             upload inland candidates to the review tool
+    find_land_candidates.py      (older optical-only candidate finder)
     add_labels.py                merge reviewed labels into labels.geojson
     sample_training.py        3. labels → water (per-pass) + land (monthly) training tables
     train.py                  4. RF + MLP per domain → model metrics
