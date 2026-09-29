@@ -122,6 +122,10 @@ Start with `--aoi pilot` (Bodo / Ogoniland), where spills are well documented. S
 
 ThankGod Chinemerem Ugwuada · Ikenna Okonkwo Anthony · Tochukwu Ambrose Ngwu
 
+## Licence
+
+© 2026 ThankGod Chinemerem Ugwuada, Ikenna Okonkwo Anthony, Tochukwu Ambrose Ngwu. **All rights reserved.** The code is public for viewing only — it may not be copied, modified or reused without written permission. See [LICENSE](LICENSE).
+
 ## Credits
 
 Marine slick detections and training labels: [SkyTruth Cerulean](https://cerulean.skytruth.org). Official spill reports: National Oil Spill Detection and Response Agency (NOSDRA), [Nigerian Oil Spill Monitor](https://nosdra.oilspillmonitor.ng/). State and LGA boundaries: [geoBoundaries](https://www.geoboundaries.org) (CC BY 4.0).
