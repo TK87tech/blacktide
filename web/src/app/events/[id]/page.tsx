@@ -64,7 +64,7 @@ export default async function EventPage({ params }: PageProps<"/events/[id]">) {
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <EventMap lon={e.lon} lat={e.lat} year={Number(e.date.slice(0, 4))} areaHa={e.area_ha} />
+          <EventMap lon={e.lon} lat={e.lat} date={e.date} surface={e.surface} areaHa={e.area_ha} />
         </div>
         <Card title="Summary">
           <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm">

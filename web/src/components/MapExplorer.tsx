@@ -8,7 +8,9 @@ import { DARK_STYLE, DELTA_BOUNDS, DELTA_VIEW, S2_ATTR, s2Tiles } from "@/lib/ba
 import { fmt1, fmtDate, fmtInt, fmtMonth, fmtPct, sourceLabel, STATUS_LABEL } from "@/lib/format";
 import { C } from "@/lib/theme";
 import type { SpillEvent, Status, Surface } from "@/lib/types";
+import ImageryControls, { syncImagery } from "./ImageryControls";
 import StatusBadge from "./StatusBadge";
+import { IMAGERY_LAYERS, IMAGERY_MIN_ZOOM } from "@/lib/imagery";
 
 type Mode = "points" | "heat";
 type ColorBy = "surface" | "status";
@@ -58,6 +60,19 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
   const [base, setBase] = useState<Base>("dark");
   const [selected, setSelected] = useState<SpillEvent | null>(null);
   const [panelOpen, setPanelOpen] = useState(false); // mobile only; always shown from md up
+  const [imgLayer, setImgLayer] = useState("none");
+  const [imgDate, setImgDate] = useState(() => events.reduce((m, e) => (e.date > m ? e.date : m), "2024-01-01"));
+  const [imgOpacity, setImgOpacity] = useState(0.9);
+  const [zoom, setZoom] = useState<number>(DELTA_VIEW.zoom);
+  const [matchImagery, setMatchImagery] = useState(true);
+  const imagery = IMAGERY_LAYERS.find((l) => l.id === imgLayer);
+  // Detections within the imagery's time window, so dots line up with what's on screen.
+  const imgWindow = useMemo(() => {
+    if (!imagery) return null;
+    const d = new Date(imgDate + "T00:00:00Z").getTime();
+    const pad = Math.max(imagery.windowDays, 1) * 86400000;
+    return [new Date(d - pad).toISOString().slice(0, 10), new Date(d + pad).toISOString().slice(0, 10)] as const;
+  }, [imagery, imgDate]);
 
   const byId = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
 
@@ -68,15 +83,17 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
     () =>
       events.filter((e) => {
         const ym = e.date.slice(0, 7);
+        const inTime = imgWindow && matchImagery
+          ? e.date >= imgWindow[0] && e.date <= imgWindow[1]
+          : ym >= startMonth && ym <= endMonth;
         return (
-          ym >= startMonth &&
-          ym <= endMonth &&
+          inTime &&
           surfaces[e.surface] &&
           statuses[e.status] &&
           e.confidence >= minConf
         );
       }),
-    [events, startMonth, endMonth, surfaces, statuses, minConf],
+    [events, startMonth, endMonth, surfaces, statuses, minConf, imgWindow, matchImagery],
   );
   const verifiedCount = useMemo(() => filtered.filter((e) => e.status === "verified").length, [filtered]);
 
@@ -95,6 +112,7 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
+    map.on("zoomend", () => setZoom(map.getZoom()));
     map.on("load", () => {
       // Satellite sits under the labels; toggled on demand.
       const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
@@ -169,7 +187,11 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
       });
       map.on("click", "pts", (ev) => {
         const id = ev.features?.[0]?.properties.id as string | undefined;
-        if (id) setSelected(byId.get(id) ?? null);
+        const e = id ? byId.get(id) : undefined;
+        if (e) {
+          setSelected(e);
+          setImgDate(e.date); // imagery follows the clicked detection
+        }
       });
       setLoaded(true);
     });
@@ -188,16 +210,26 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
     const map = mapRef.current;
     if (!loaded || !map) return;
     map.setLayoutProperty("heat", "visibility", mode === "heat" ? "visible" : "none");
-    map.setPaintProperty("pts", "circle-opacity", mode === "heat" ? 0 : 0.75);
-    map.setPaintProperty("pts", "circle-stroke-width", mode === "heat" ? 0 : 1.5);
+    // Over live imagery, detections become outlines so the picture stays visible.
+    const outline = !!imagery;
+    map.setPaintProperty("pts", "circle-opacity", mode === "heat" || outline ? 0 : 0.75);
+    map.setPaintProperty("pts", "circle-stroke-width", mode === "heat" ? 0 : outline ? 2.5 : 1.5);
+    map.setPaintProperty("pts", "circle-stroke-color", outline ? colorExpr(colorBy) : C.surface);
     map.setPaintProperty("pts", "circle-color", colorExpr(colorBy));
     map.setLayoutProperty("satellite", "visibility", base === "satellite" ? "visible" : "none");
-  }, [mode, colorBy, base, loaded]);
+  }, [mode, colorBy, base, loaded, imagery]);
 
   useEffect(() => {
     if (!loaded) return;
     mapRef.current?.setFilter("pts-selected", ["==", ["get", "id"], selected?.id ?? ""]);
   }, [selected, loaded]);
+
+  // Live Sentinel imagery overlay, below the heatmap and detection circles.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!loaded || !map) return;
+    syncImagery(map, imgLayer, imgDate, imgOpacity, "heat");
+  }, [imgLayer, imgDate, imgOpacity, loaded]);
 
   // Time-lapse
   useEffect(() => {
@@ -349,6 +381,23 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
                 { value: "satellite", label: "Satellite" },
               ]}
             />
+          </Section>
+          <Section title="Satellite imagery (live)">
+            <ImageryControls
+              layerId={imgLayer}
+              onLayer={setImgLayer}
+              date={imgDate}
+              onDate={setImgDate}
+              opacity={imgOpacity}
+              onOpacity={setImgOpacity}
+              zoomedOut={zoom < IMAGERY_MIN_ZOOM}
+            />
+            {imagery && (
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-2">
+                <input type="checkbox" checked={matchImagery} onChange={(e) => setMatchImagery(e.target.checked)} className="accent-white" />
+                Only show detections from these dates
+              </label>
+            )}
           </Section>
           <p className="mt-3 text-[11px] leading-relaxed text-muted">
             Circle size is proportional to detected area. Hover for details, click to inspect.

@@ -3,16 +3,40 @@
 import { maplibregl } from "@/lib/maplibre";
 import { useEffect, useRef, useState } from "react";
 import { rasterStyle, S2_YEARS, s2Tiles } from "@/lib/basemaps";
+import { IMAGERY_LAYERS } from "@/lib/imagery";
 import { C } from "@/lib/theme";
+import ImageryControls, { syncImagery } from "./ImageryControls";
 
-/** Satellite view of one event with a before/after toggle on the yearly Sentinel-2 cloudless mosaics. */
-export default function EventMap({ lon, lat, year, areaHa }: { lon: number; lat: number; year: number; areaHa: number }) {
+/**
+ * Satellite view of one event: yearly Sentinel-2 cloud-free mosaics (before / after) as the
+ * base, plus live Sentinel-1 / Sentinel-2 layers on the event's own date.
+ */
+export default function EventMap({
+  lon,
+  lat,
+  date,
+  surface,
+  areaHa,
+}: {
+  lon: number;
+  lat: number;
+  date: string;
+  surface: "water" | "land";
+  areaHa: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const year = Number(date.slice(0, 4));
   // Nearest available mosaic strictly before / after the event year.
   const before = [...S2_YEARS].reverse().find((y) => y < year) ?? S2_YEARS[0];
   const after = S2_YEARS.find((y) => y > year) ?? S2_YEARS[S2_YEARS.length - 1];
   const [shown, setShown] = useState(after);
+  const [loaded, setLoaded] = useState(false);
+  // Water events open on the radar pass that caught them; land on the mosaic comparison.
+  const [imgLayer, setImgLayer] = useState(surface === "water" ? "S1_VV" : "none");
+  const [imgDate, setImgDate] = useState(date);
+  const [imgOpacity, setImgOpacity] = useState(1);
+  const [panel, setPanel] = useState(false);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -20,7 +44,7 @@ export default function EventMap({ lon, lat, year, areaHa }: { lon: number; lat:
       container: ref.current,
       style: rasterStyle([s2Tiles(after)], "Sentinel-2 cloudless by EOX (Copernicus data)", 16),
       center: [lon, lat],
-      zoom: 13,
+      zoom: surface === "water" ? 11.5 : 13,
       attributionControl: { compact: true },
     });
     mapRef.current = map;
@@ -34,31 +58,63 @@ export default function EventMap({ lon, lat, year, areaHa }: { lon: number; lat:
       });
       map.addSource("fp", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } } });
       map.addLayer({ id: "fp-line", type: "line", source: "fp", paint: { "line-color": C.status.unverified, "line-width": 2, "line-dasharray": [2, 1.5] } });
+      setLoaded(true);
     });
     return () => map.remove();
-  }, [lon, lat, after, areaHa]);
+  }, [lon, lat, after, areaHa, surface]);
 
   useEffect(() => {
     const src = mapRef.current?.getSource("base") as maplibregl.RasterTileSource | undefined;
     src?.setTiles([s2Tiles(shown)]);
   }, [shown]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!loaded || !map) return;
+    syncImagery(map, imgLayer, imgDate, imgOpacity, "fp-line");
+  }, [imgLayer, imgDate, imgOpacity, loaded]);
+
+  const live = IMAGERY_LAYERS.find((l) => l.id === imgLayer);
+
   return (
-    <div className="relative h-[360px] overflow-hidden rounded-xl border border-line">
+    <div className="relative h-[420px] overflow-hidden rounded-xl border border-line">
       <div className="absolute inset-0"><div ref={ref} className="h-full w-full" /></div>
-      <div className="absolute left-3 top-3 z-10 flex rounded-md bg-page/90 p-0.5 text-xs">
-        {[before, after].filter((y, i, a) => a.indexOf(y) === i).map((y, i) => (
-          <button
-            key={y}
-            onClick={() => setShown(y)}
-            className={`rounded px-2.5 py-1 ${shown === y ? "bg-white text-black" : "text-ink-2"}`}
-          >
-            {i === 0 && before !== after ? "Before" : "After"} · {y}
-          </button>
-        ))}
+      <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-2">
+        {!live && (
+          <div className="flex rounded-md bg-page/90 p-0.5 text-xs">
+            {[before, after].filter((y, i, a) => a.indexOf(y) === i).map((y, i) => (
+              <button
+                key={y}
+                onClick={() => setShown(y)}
+                className={`rounded px-2.5 py-1 ${shown === y ? "bg-white text-black" : "text-ink-2"}`}
+              >
+                {i === 0 && before !== after ? "Before" : "After"} · {y}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => setPanel((p) => !p)}
+          className={`rounded-md px-2.5 py-1 text-xs ${panel ? "bg-white text-black" : "bg-page/90 text-ink-2"}`}
+        >
+          {live ? `Imagery: ${live.label}` : "Imagery layers"} ▾
+        </button>
       </div>
+      {panel && (
+        <div className="card absolute left-3 top-12 z-10 w-[260px] p-3 shadow-2xl">
+          <ImageryControls
+            layerId={imgLayer}
+            onLayer={setImgLayer}
+            date={imgDate}
+            onDate={setImgDate}
+            opacity={imgOpacity}
+            onOpacity={setImgOpacity}
+          />
+        </div>
+      )}
       <div className="absolute bottom-3 left-3 z-10 rounded bg-page/80 px-2 py-1 text-[11px] text-ink-2">
-        Dashed ring ≈ detected area · annual cloud-free mosaic
+        Dashed ring ≈ detected area ·{" "}
+        {live ? `${live.label}, ${imgDate}${live.windowDays ? ` ±${live.windowDays} days` : ""}` : "annual cloud-free mosaic"}
       </div>
     </div>
   );
