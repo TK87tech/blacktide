@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { maplibregl } from "@/lib/maplibre";
 import type { GeoJSONSource } from "maplibre-gl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DARK_STYLE, DELTA_BOUNDS, DELTA_VIEW, S2_ATTR, s2Tiles } from "@/lib/basemaps";
 import { fmt1, fmtDate, fmtInt, fmtMonth, fmtPct, sourceLabel, STATUS_LABEL } from "@/lib/format";
 import { C } from "@/lib/theme";
 import type { SpillEvent, Status, Surface } from "@/lib/types";
-import ImageryControls, { syncImagery } from "./ImageryControls";
+import ImageryControls, { type ImageryState, syncImagery, useImageryStatus } from "./ImageryControls";
 import StatusBadge from "./StatusBadge";
 import { IMAGERY_LAYERS, IMAGERY_MIN_ZOOM } from "@/lib/imagery";
 
@@ -60,19 +60,29 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
   const [base, setBase] = useState<Base>("dark");
   const [selected, setSelected] = useState<SpillEvent | null>(null);
   const [panelOpen, setPanelOpen] = useState(false); // mobile only; always shown from md up
-  const [imgLayer, setImgLayer] = useState("none");
-  const [imgDate, setImgDate] = useState(() => events.reduce((m, e) => (e.date > m ? e.date : m), "2024-01-01"));
-  const [imgOpacity, setImgOpacity] = useState(0.9);
+  const [img, setImg] = useState<ImageryState>(() => ({
+    layerId: "none",
+    date: events.reduce((m, e) => (e.date > m ? e.date : m), "2024-01-01"),
+    opacity: 0.9,
+    exact: false,
+    nonce: 0,
+  }));
+  const patchImg = useCallback((p: Partial<ImageryState>) => setImg((s) => ({ ...s, ...p })), []);
+  const imgDate = img.date;
   const [zoom, setZoom] = useState<number>(DELTA_VIEW.zoom);
+  const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
+  const [mapObj, setMapObj] = useState<maplibregl.Map | null>(null);
+  const retryImagery = useCallback(() => patchImg({ nonce: Date.now() }), [patchImg]);
+  const imgLoading = useImageryStatus(mapObj, retryImagery);
   const [matchImagery, setMatchImagery] = useState(true);
-  const imagery = IMAGERY_LAYERS.find((l) => l.id === imgLayer);
+  const imagery = IMAGERY_LAYERS.find((l) => l.id === img.layerId);
   // Detections within the imagery's time window, so dots line up with what's on screen.
   const imgWindow = useMemo(() => {
     if (!imagery) return null;
     const d = new Date(imgDate + "T00:00:00Z").getTime();
-    const pad = Math.max(imagery.windowDays, 1) * 86400000;
+    const pad = Math.max(img.exact ? 0 : imagery.windowDays, 1) * 86400000;
     return [new Date(d - pad).toISOString().slice(0, 10), new Date(d + pad).toISOString().slice(0, 10)] as const;
-  }, [imagery, imgDate]);
+  }, [imagery, imgDate, img.exact]);
 
   const byId = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
 
@@ -112,7 +122,12 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
-    map.on("zoomend", () => setZoom(map.getZoom()));
+    const onView = () => {
+      setZoom(map.getZoom());
+      const b = map.getBounds();
+      setBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    };
+    map.on("moveend", onView);
     map.on("load", () => {
       // Satellite sits under the labels; toggled on demand.
       const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
@@ -190,14 +205,16 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
         const e = id ? byId.get(id) : undefined;
         if (e) {
           setSelected(e);
-          setImgDate(e.date); // imagery follows the clicked detection
+          patchImg({ date: e.date }); // imagery follows the clicked detection
         }
       });
       setLoaded(true);
+      setMapObj(map);
+      onView();
     });
 
     return () => map.remove();
-  }, [byId]);
+  }, [byId, patchImg]);
 
   // Data
   useEffect(() => {
@@ -228,8 +245,8 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
   useEffect(() => {
     const map = mapRef.current;
     if (!loaded || !map) return;
-    syncImagery(map, imgLayer, imgDate, imgOpacity, "heat");
-  }, [imgLayer, imgDate, imgOpacity, loaded]);
+    syncImagery(map, img, "heat");
+  }, [img, loaded]);
 
   // Time-lapse
   useEffect(() => {
@@ -384,13 +401,11 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
           </Section>
           <Section title="Satellite imagery (live)">
             <ImageryControls
-              layerId={imgLayer}
-              onLayer={setImgLayer}
-              date={imgDate}
-              onDate={setImgDate}
-              opacity={imgOpacity}
-              onOpacity={setImgOpacity}
+              state={img}
+              onChange={patchImg}
+              bbox={bbox}
               zoomedOut={zoom < IMAGERY_MIN_ZOOM}
+              loading={imgLoading}
             />
             {imagery && (
               <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-2">

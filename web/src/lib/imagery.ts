@@ -41,13 +41,15 @@ function shift(iso: string, days: number) {
 }
 
 /** MapLibre raster tile URL for a layer on a date (WMS, Web Mercator bbox per tile). */
-export function imageryTiles(layer: ImageryLayer, date: string) {
-  const time = `${shift(date, -layer.windowDays)}/${shift(date, layer.windowDays)}`;
+export function imageryTiles(layer: ImageryLayer, date: string, opts: { exact?: boolean; nonce?: number } = {}) {
+  const days = opts.exact ? 0 : layer.windowDays;
+  const time = `${shift(date, -days)}/${shift(date, days)}`;
   const params = new URLSearchParams({
     SERVICE: "WMS", REQUEST: "GetMap", VERSION: "1.3.0", LAYERS: layer.id, CRS: "EPSG:3857",
     WIDTH: "256", HEIGHT: "256", FORMAT: "image/png", TRANSPARENT: "true", SHOWLOGO: "false", TIME: time,
   });
-  if (layer.group.startsWith("Optical")) params.set("MAXCC", "40");
+  if (layer.group.startsWith("Optical") && !opts.exact) params.set("MAXCC", "40");
+  if (opts.nonce) params.set("_r", String(opts.nonce)); // forces a fresh fetch on "Reload"
   // {bbox-epsg-3857} is filled in by MapLibre and must stay unencoded.
   return `https://sh.dataspace.copernicus.eu/ogc/wms/${CDSE_INSTANCE}?${params}&BBOX={bbox-epsg-3857}`;
 }

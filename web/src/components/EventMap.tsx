@@ -1,11 +1,11 @@
 "use client";
 
 import { maplibregl } from "@/lib/maplibre";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { rasterStyle, S2_YEARS, s2Tiles } from "@/lib/basemaps";
 import { IMAGERY_LAYERS } from "@/lib/imagery";
 import { C } from "@/lib/theme";
-import ImageryControls, { syncImagery } from "./ImageryControls";
+import ImageryControls, { type ImageryState, syncImagery, useImageryStatus } from "./ImageryControls";
 
 /**
  * Satellite view of one event: yearly Sentinel-2 cloud-free mosaics (before / after) as the
@@ -33,10 +33,19 @@ export default function EventMap({
   const [shown, setShown] = useState(after);
   const [loaded, setLoaded] = useState(false);
   // Water events open on the radar pass that caught them; land on the mosaic comparison.
-  const [imgLayer, setImgLayer] = useState(surface === "water" ? "S1_VV" : "none");
-  const [imgDate, setImgDate] = useState(date);
-  const [imgOpacity, setImgOpacity] = useState(1);
+  const [img, setImg] = useState<ImageryState>({
+    layerId: surface === "water" ? "S1_VV" : "none",
+    date,
+    opacity: 1,
+    exact: false,
+    nonce: 0,
+  });
+  const patchImg = useCallback((p: Partial<ImageryState>) => setImg((s) => ({ ...s, ...p })), []);
   const [panel, setPanel] = useState(false);
+  const [mapObj, setMapObj] = useState<maplibregl.Map | null>(null);
+  const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
+  const retry = useCallback(() => patchImg({ nonce: Date.now() }), [patchImg]);
+  const imgLoading = useImageryStatus(mapObj, retry);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -59,6 +68,13 @@ export default function EventMap({
       map.addSource("fp", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } } });
       map.addLayer({ id: "fp-line", type: "line", source: "fp", paint: { "line-color": C.status.unverified, "line-width": 2, "line-dasharray": [2, 1.5] } });
       setLoaded(true);
+      setMapObj(map);
+      const onView = () => {
+        const b = map.getBounds();
+        setBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      };
+      map.on("moveend", onView);
+      onView();
     });
     return () => map.remove();
   }, [lon, lat, after, areaHa, surface]);
@@ -71,10 +87,10 @@ export default function EventMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!loaded || !map) return;
-    syncImagery(map, imgLayer, imgDate, imgOpacity, "fp-line");
-  }, [imgLayer, imgDate, imgOpacity, loaded]);
+    syncImagery(map, img, "fp-line");
+  }, [img, loaded]);
 
-  const live = IMAGERY_LAYERS.find((l) => l.id === imgLayer);
+  const live = IMAGERY_LAYERS.find((l) => l.id === img.layerId);
 
   return (
     <div className="relative h-[420px] overflow-hidden rounded-xl border border-line">
@@ -101,20 +117,14 @@ export default function EventMap({
         </button>
       </div>
       {panel && (
-        <div className="card absolute left-3 top-12 z-10 w-[260px] p-3 shadow-2xl">
-          <ImageryControls
-            layerId={imgLayer}
-            onLayer={setImgLayer}
-            date={imgDate}
-            onDate={setImgDate}
-            opacity={imgOpacity}
-            onOpacity={setImgOpacity}
-          />
+        <div className="card absolute left-3 top-12 z-10 max-h-[calc(100%-4rem)] w-[280px] overflow-y-auto p-3 shadow-2xl">
+          <ImageryControls state={img} onChange={patchImg} bbox={bbox} loading={imgLoading} />
         </div>
       )}
       <div className="absolute bottom-3 left-3 z-10 rounded bg-page/80 px-2 py-1 text-[11px] text-ink-2">
         Dashed ring ≈ detected area ·{" "}
-        {live ? `${live.label}, ${imgDate}${live.windowDays ? ` ±${live.windowDays} days` : ""}` : "annual cloud-free mosaic"}
+        {live ? `${live.label}, ${img.date}${live.windowDays && !img.exact ? ` ±${live.windowDays} days` : ""}` : "annual cloud-free mosaic"}
+        {live && imgLoading && " · loading…"}
       </div>
     </div>
   );
