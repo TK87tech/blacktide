@@ -8,8 +8,8 @@ export const metadata = { title: "Model — BlackTide" };
 
 const DOMAIN_TITLE: Record<string, { title: string; desc: string }> = {
   water: {
-    title: "Water — per satellite pass",
-    desc: "Sentinel-1 radar, local darkness, texture, wind speed and incidence angle for each pass.",
+    title: "Water — research comparison",
+    desc: "BlackTide's own marine models (per-pass Sentinel-1 radar, local darkness, wind, incidence angle), trained on SkyTruth Cerulean's reviewed slicks. Not used for the map: at sea scale they raise too many false alarms, so marine events come from Cerulean.",
   },
   land: {
     title: "Land & creek banks — monthly",

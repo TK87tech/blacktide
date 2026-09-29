@@ -4,7 +4,7 @@ import Card from "@/components/Card";
 import EventMap from "@/components/EventMap";
 import StatusBadge from "@/components/StatusBadge";
 import { getEvents } from "@/lib/data";
-import { fmt1, fmtDate, fmtInt, fmtPct } from "@/lib/format";
+import { fmt1, fmtDate, fmtInt, fmtPct, sourceLabel } from "@/lib/format";
 import type { SpillEvent } from "@/lib/types";
 
 export const dynamicParams = false;
@@ -68,6 +68,7 @@ export default async function EventPage({ params }: PageProps<"/events/[id]">) {
         </div>
         <Card title="Summary">
           <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
+            <Item label="Detected by" value={sourceLabel(e.source)} />
             <Item label="Surface" value={e.surface === "water" ? "Water" : "Land"} />
             <Item label="Detected area" value={`${fmt1(e.area_ha)} ha`} />
             <Item label="Model confidence" value={fmtPct(e.confidence, 1)} />
@@ -90,6 +91,29 @@ export default async function EventPage({ params }: PageProps<"/events/[id]">) {
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
+        {e.source === "cerulean" ? (
+          <Card title="Source" desc="This marine detection comes from SkyTruth Cerulean" className="lg:col-span-2">
+            <p className="text-sm leading-relaxed text-ink-2">
+              Cerulean runs a deep-learning slick detector on every Sentinel-1 radar pass and has part of its
+              detections reviewed by people.{" "}
+              {e.cause
+                ? `A reviewer attributed this slick to: ${e.cause}.`
+                : e.status === "verified"
+                  ? "It was reviewed by a person."
+                  : "This one is a machine detection that hasn't been reviewed yet."}
+            </p>
+            {e.source_url && (
+              <a
+                href={e.source_url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black"
+              >
+                View the slick outline on Cerulean ↗
+              </a>
+            )}
+          </Card>
+        ) : (
         <Card title="Spectral & radar signature" desc="Feature values the model saw for this event" className="lg:col-span-2">
           <table className="w-full text-sm">
             <tbody>
@@ -108,6 +132,7 @@ export default async function EventPage({ params }: PageProps<"/events/[id]">) {
             </tbody>
           </table>
         </Card>
+        )}
         <Card title="Other detections within 5 km" desc="Recurring spills at the same place often point to chronic leaks or repeat theft">
           {nearby.length ? (
             <ul className="space-y-2 text-sm">

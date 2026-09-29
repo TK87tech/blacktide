@@ -59,14 +59,18 @@ export function byState(events: SpillEvent[]) {
   return [...m.values()].sort((a, b) => b.count - a.count);
 }
 
+/** "Offshore, 23 km from Forcados" → "Offshore near Forcados", so offshore slicks group together. */
+export const hotspotName = (site: string) => site.replace(/^Offshore, \d+ km from /, "Offshore near ");
+
 export function hotspots(events: SpillEvent[], limit = 8) {
   const m = new Map<string, { site: string; lga: string; state: string; count: number; area: number; last: string }>();
   for (const e of events.filter(isSpill)) {
-    const row = m.get(e.site) ?? { site: e.site, lga: e.lga, state: e.state, count: 0, area: 0, last: e.date };
+    const site = hotspotName(e.site);
+    const row = m.get(site) ?? { site, lga: e.lga, state: e.state, count: 0, area: 0, last: e.date };
     row.count++;
     row.area += e.area_ha;
     if (e.date > row.last) row.last = e.date;
-    m.set(e.site, row);
+    m.set(site, row);
   }
   return [...m.values()].sort((a, b) => b.count - a.count).slice(0, limit);
 }

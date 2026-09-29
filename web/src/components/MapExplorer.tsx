@@ -5,7 +5,7 @@ import { maplibregl } from "@/lib/maplibre";
 import type { GeoJSONSource } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DARK_STYLE, DELTA_BOUNDS, DELTA_VIEW, S2_ATTR, s2Tiles } from "@/lib/basemaps";
-import { fmt1, fmtCompact, fmtDate, fmtInt, fmtMonth, fmtPct, STATUS_LABEL } from "@/lib/format";
+import { fmt1, fmtDate, fmtInt, fmtMonth, fmtPct, sourceLabel, STATUS_LABEL } from "@/lib/format";
 import { C } from "@/lib/theme";
 import type { SpillEvent, Status, Surface } from "@/lib/types";
 import StatusBadge from "./StatusBadge";
@@ -78,7 +78,7 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
       }),
     [events, startMonth, endMonth, surfaces, statuses, minConf],
   );
-  const totalArea = useMemo(() => filtered.reduce((s, e) => s + e.area_ha, 0), [filtered]);
+  const verifiedCount = useMemo(() => filtered.filter((e) => e.status === "verified").length, [filtered]);
 
   // Map setup — once.
   useEffect(() => {
@@ -124,11 +124,11 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
         paint: {
           "circle-radius": [
             "interpolate", ["linear"], ["zoom"],
-            6, ["min", 14, ["+", 2.5, ["*", 0.45, ["sqrt", ["get", "area_ha"]]]]],
-            12, ["min", 40, ["+", 6, ["*", 2.2, ["sqrt", ["get", "area_ha"]]]]],
+            6, ["min", 7, ["+", 2, ["*", 0.12, ["sqrt", ["get", "area_ha"]]]]],
+            12, ["min", 28, ["+", 5, ["*", 1, ["sqrt", ["get", "area_ha"]]]]],
           ],
           "circle-color": colorExpr("surface"),
-          "circle-opacity": 0.85,
+          "circle-opacity": 0.75,
           "circle-stroke-color": C.surface,
           "circle-stroke-width": 1.5,
         },
@@ -188,7 +188,7 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
     const map = mapRef.current;
     if (!loaded || !map) return;
     map.setLayoutProperty("heat", "visibility", mode === "heat" ? "visible" : "none");
-    map.setPaintProperty("pts", "circle-opacity", mode === "heat" ? 0 : 0.85);
+    map.setPaintProperty("pts", "circle-opacity", mode === "heat" ? 0 : 0.75);
     map.setPaintProperty("pts", "circle-stroke-width", mode === "heat" ? 0 : 1.5);
     map.setPaintProperty("pts", "circle-color", colorExpr(colorBy));
     map.setLayoutProperty("satellite", "visibility", base === "satellite" ? "visible" : "none");
@@ -244,8 +244,8 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
               <div className="text-xs text-muted">detections</div>
             </div>
             <div className="rounded-lg bg-surface-2 p-2.5">
-              <div className="text-2xl font-semibold">{fmtCompact(totalArea)}</div>
-              <div className="text-xs text-muted">hectares</div>
+              <div className="text-2xl font-semibold">{fmtInt(verifiedCount)}</div>
+              <div className="text-xs text-muted">human-verified</div>
             </div>
           </div>
 
@@ -375,6 +375,7 @@ export default function MapExplorer({ events, months }: { events: SpillEvent[]; 
             <StatusBadge status={selected.status} />
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+            <Stat label="Detected by" value={sourceLabel(selected.source)} />
             <Stat label="Surface" value={selected.surface === "water" ? "Water" : "Land"} />
             <Stat label="Area" value={`${fmt1(selected.area_ha)} ha`} />
             <Stat label="Confidence" value={fmtPct(selected.confidence)} />

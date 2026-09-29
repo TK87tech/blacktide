@@ -27,6 +27,11 @@ export interface SpillEvent {
   people_5km: number;
   mangrove_ha: number;
   wind_ms?: number | null;
+  /** "cerulean" for SkyTruth Cerulean imports; absent for BlackTide's own models. */
+  source?: string;
+  source_url?: string;
+  /** Cerulean's reviewed source category, e.g. "Infrastructure", "Vessel". */
+  cause?: string | null;
   features: EventFeatures;
   lon: number;
   lat: number;

@@ -2,11 +2,16 @@
 
 **Satellite + AI oil spill intelligence for the Niger Delta.**
 
-*Marée noire* (black tide) is the French term for an oil spill. BlackTide watches the whole Niger Delta from orbit every month. It combines Sentinel-1 radar, which sees through cloud, with Sentinel-2 optical imagery, and Random Forest and neural network models flag likely contamination on land and water. Every detection is published on an open map and dashboard.
+*Marée noire* (black tide) is the French term for an oil spill. BlackTide watches the whole Niger Delta from orbit:
+
+- **Sea & coast:** oil slicks detected on every Sentinel-1 radar pass by [SkyTruth Cerulean](https://cerulean.skytruth.org), imported and enriched with nearby-population and mangrove context.
+- **Land, creeks & estuaries** (where Cerulean doesn't look): BlackTide's own pipeline finds sudden vegetation die-off on Sentinel-2, has analysts confirm candidates, and trains a Random Forest on Sentinel-1 + Sentinel-2 features.
+
+Every detection is published on an open map and dashboard.
 
 It runs entirely on free tools and free tiers: no servers and no paid APIs.
 
-> The site ships with a **synthetic sample dataset** so it works out of the box. Run the Earth Engine pipeline (below) to replace it with real detections.
+> The site now shows **real marine detections** (SkyTruth Cerulean). Land & creek detections appear once enough candidate sites have been reviewed.
 
 ## What's in the app
 
@@ -51,7 +56,8 @@ pipeline/
     add_labels.py                merge reviewed labels into labels.geojson
     sample_training.py        3. labels → water (per-pass) + land (monthly) training tables
     train.py                  4. RF + MLP per domain → model metrics
-    detect.py                 5. water per pass + land monthly → web/data/events.json
+    import_cerulean.py           marine events from SkyTruth Cerulean → web/data/events.json
+    detect.py                 5. land model monthly (+ --water research model) → web/data/events.json
     generate_sample_data.py      synthetic demo data
   labels/            your labelled points (see labels/README.md)
 .github/workflows/   deploy.yml (Pages), pipeline.yml (monthly detection)
@@ -81,10 +87,11 @@ python pipeline/scripts/find_land_candidates.py     # 2. land / creek candidates
 python pipeline/scripts/add_labels.py reviewed.json
 python pipeline/scripts/sample_training.py          # 3. training tables + EE assets
 python pipeline/scripts/train.py                    # 4. metrics (add --publish for the website)
+python pipeline/scripts/import_cerulean.py          # marine events (no Earth Engine needed with --no-enrich)
 python pipeline/scripts/detect.py --aoi pilot --start 2024-01-01 --end 2024-04-01 --dry-run
 ```
 
-Water and land are detected differently. Water is checked **one Sentinel-1 pass at a time**, using the wind at that moment, and is skipped when the wind is below 2 or above 12 m/s. Land uses monthly radar + optical composites. `--dry-run` writes a preview to `pipeline/output/` instead of the website.
+`detect.py` runs each month as an Earth Engine **batch task**, prints the EECU-hours it used, and **refuses to submit** if the estimated cost is over `--max-eecu` (default 20). BlackTide's own water model (`--water`) is kept as a research comparison: tested against Cerulean off Akwa Ibom it caught about half the slicks but most of its alerts were false, so the map uses Cerulean for the sea. `--dry-run` writes a preview to `pipeline/output/` instead of the website.
 
 Start with `--aoi pilot` (Bodo / Ogoniland), where spills are well documented. Scale to `--aoi delta` once the metrics look trustworthy.
 

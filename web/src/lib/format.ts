@@ -19,6 +19,8 @@ export function fmtMonth(ym: string) {
   });
 }
 
+export const sourceLabel = (source?: string) => (source === "cerulean" ? "SkyTruth Cerulean" : "BlackTide model");
+
 export const STATUS_LABEL = {
   verified: "Verified spill",
   unverified: "Unverified",

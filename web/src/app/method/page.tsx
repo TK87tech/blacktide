@@ -3,38 +3,39 @@ export const metadata = { title: "Method — BlackTide" };
 const STEPS = [
   {
     n: "01",
-    title: "Acquire",
-    body: "Sentinel-1 GRD (C-band SAR, IW mode, VV+VH) and Sentinel-2 surface reflectance for the Niger Delta, 2017 onwards, pulled directly inside Google Earth Engine — no downloads.",
+    title: "Sea & coast: SkyTruth Cerulean",
+    body: "Oil on open water is taken from SkyTruth Cerulean, which runs a deep-learning slick detector on every Sentinel-1 radar pass and has part of its output reviewed by people. BlackTide adds context to each slick: nearest community, people within 5 km (WorldPop) and mangrove area.",
   },
   {
     n: "02",
-    title: "Preprocess",
-    body: "SAR: calibrated, terrain-corrected sigma0 → border-noise mask → speckle filter → dB. Optical: Cloud Score+ masking, monthly median composites. Radar sees through the Delta's near-constant cloud; optical adds vegetation and colour evidence when the sky clears.",
+    title: "Land, creeks & estuaries: BlackTide",
+    body: "Cerulean doesn't cover inland areas, so BlackTide looks for what oil does there: it kills vegetation. Dry-season Sentinel-2 NDVI is compared year on year to find sudden die-off of healthy mangrove, swamp forest and farmland, flagging patches beside creeks.",
   },
   {
     n: "03",
-    title: "Extract features",
-    body: "VV and VH backscatter, VV/VH ratio, GLCM texture (entropy, contrast, correlation) from SAR; NDVI, year-on-year NDVI change, NDWI, MNDWI and the Oil Spill Index from Sentinel-2.",
+    title: "Human review",
+    body: "Die-off has other causes too (clearing, fire, flooding), so each candidate is checked by an analyst on before/after imagery. Confirmed and rejected sites both become training labels.",
   },
   {
     n: "04",
-    title: "Classify",
-    body: "Random Forest (300 trees) predicts the probability of oil per 20 m pixel. A SAR-only model fills in wherever clouds hid every optical scene that month. A neural network (MLP) is trained on the same samples for comparison.",
+    title: "Land model",
+    body: "A Random Forest trained on those labels uses monthly Sentinel-1 radar (which sees through cloud) and Sentinel-2 indices — NDVI change, NDWI, MNDWI, the Oil Spill Index — with a radar-only fallback when clouds hide every optical scene.",
   },
   {
     n: "05",
-    title: "Vectorise & enrich",
-    body: "Pixels above 0.7 probability are grouped into events; specks under ~0.4 ha are dropped. Each event gets its area, water/land context (JRC Global Surface Water), people within 5 km (WorldPop) and mangrove area.",
+    title: "Research comparison",
+    body: "BlackTide's own marine models (Random Forest and a neural network on per-pass radar, local darkness, wind and incidence angle) are trained on Cerulean's reviewed slicks and reported on the Model page — but not used for the map, because pixel-level models raise too many false alarms over open sea.",
   },
   {
     n: "06",
-    title: "Validate",
-    body: "Events start unverified. Analysts confirm or reject them against NOSDRA reports, imagery and field visits; each decision becomes a new training label, so the model improves with use.",
+    title: "Validate & repeat",
+    body: "Everything runs on free tools. A monthly GitHub Action imports new Cerulean slicks, runs the land model and republishes the site.",
   },
 ];
 
 const STACK = [
   ["Satellite processing", "Google Earth Engine (free, non-commercial)"],
+  ["Marine detections", "SkyTruth Cerulean (open Sentinel-1 slick detections)"],
   ["Machine learning", "Earth Engine smileRandomForest · scikit-learn"],
   ["Automation", "GitHub Actions (scheduled monthly run)"],
   ["Web app", "Next.js static export · MapLibre GL · Recharts"],
@@ -46,7 +47,8 @@ const LIMITS = [
   "Dark patches on radar are not always oil: low wind, rain cells, algae and mudflats look similar. The model learns these look-alikes only if they are labelled.",
   "Land spills under dense mangrove canopy are harder to see than slicks on open water.",
   "Sentinel-1B failed in December 2021, halving revisit frequency until Sentinel-1C came online in 2025 — fewer looks means more missed short-lived slicks in that period.",
-  "Event dates are the month of detection, not the exact spill date.",
+  "Land events are dated by the month (or dry season) they were detected, not the exact spill date; marine events carry the exact satellite pass date.",
+  "Cerulean's machine detections that no one has reviewed yet are shown as unverified.",
 ];
 
 export default function MethodPage() {
@@ -96,7 +98,7 @@ export default function MethodPage() {
         ThankGod Chinemerem Ugwuada · Ikenna Okonkwo Anthony · Tochukwu Ambrose Ngwu
       </p>
       <p className="mt-6 text-xs text-muted">
-        Contains modified Copernicus Sentinel data. Sentinel-2 cloudless mosaics © EOX IT Services GmbH, CC BY-NC-SA 4.0.
+        Marine and coastal slick detections: SkyTruth Cerulean (cerulean.skytruth.org). Contains modified Copernicus Sentinel data. Sentinel-2 cloudless mosaics © EOX IT Services GmbH, CC BY-NC-SA 4.0.
       </p>
     </div>
   );

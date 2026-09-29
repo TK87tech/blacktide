@@ -39,6 +39,9 @@ from blacktide.config import (  # noqa: E402
 from blacktide.sites import SITES  # noqa: E402
 
 MAX_EVENTS_PER_IMAGE = 100
+# Measured cost, EECU-hours per km² per month (water: coast_east test, Mar 2024). Land is an
+# estimate until its first run; the actual figure is printed after every task.
+EECU_PER_KM2_MONTH = {"water": 3.0 / 5900, "land": 1.0 / 5900}
 VECTOR_SCALE = WATER_SCALE  # grouping pixels into events
 
 
@@ -210,6 +213,9 @@ def main():
     ap.add_argument("--end")
     ap.add_argument("--threshold", type=float, default=DETECTION_THRESHOLD)
     ap.add_argument("--collect", action="store_true", help="only read existing detection assets")
+    ap.add_argument("--water", action="store_true",
+                    help="also run BlackTide's own water model (research only; marine events normally come from Cerulean)")
+    ap.add_argument("--max-eecu", type=float, default=20.0, help="refuse to submit if the estimated cost exceeds this")
     ap.add_argument("--dry-run", action="store_true", help="write pipeline/output/events_preview.json instead of web/data")
     args = ap.parse_args()
     start, end = (args.start, args.end) if args.start and args.end else last_month()
@@ -232,9 +238,20 @@ def main():
                     jobs.append((aid, dom, f"rf-{dom}"))
     else:
         water = features.water_mask()
-        water_samples, land_samples = load_samples("training_water"), load_samples("training_land")
+        water_samples = load_samples("training_water") if args.water else None
+        land_samples = load_samples("training_land")
         if not water_samples and not land_samples:
-            raise SystemExit("No training assets found — run sample_training.py first (and wait for the uploads).")
+            print("No land model yet (needs reviewed land labels) — nothing to detect. "
+                  "Marine events come from import_cerulean.py.")
+            return
+        w, s_, e_, n_ = AOIS[args.aoi]
+        km2 = (e_ - w) * 111 * math.cos(math.radians((s_ + n_) / 2)) * (n_ - s_) * 111
+        n_months = len(list(months(start, end)))
+        doms = [d for d, on in (("water", water_samples), ("land", land_samples)) if on]
+        estimate = sum(EECU_PER_KM2_MONTH[d] for d in doms) * km2 * n_months
+        print(f"Estimated cost: {estimate:.1f} EECU-hours ({', '.join(doms)}, {km2:,.0f} km², {n_months} month(s))")
+        if estimate > args.max_eecu:
+            raise SystemExit(f"Over budget (--max-eecu {args.max_eecu}). Use a smaller --aoi / date range, or raise the cap.")
         water_clf = model.train_water(water_samples) if water_samples else None
         land_clfs = model.train(land_samples) if land_samples else None
         print(f"Models: water={'yes' if water_clf else 'no'}, land={'yes' if land_clfs else 'no'}")

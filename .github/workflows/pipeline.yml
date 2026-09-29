@@ -1,7 +1,8 @@
 name: Detection pipeline
 
-# Runs the Earth Engine detection for the previous month, commits the new events
-# to web/data and redeploys the site. Needs two repository secrets:
+# Monthly: imports SkyTruth Cerulean marine slicks, runs BlackTide's land/creek
+# detector for the previous month, commits web/data and redeploys the site.
+# Cerulean import works without secrets; land detection + enrichment need:
 #   GEE_SERVICE_ACCOUNT_KEY  – JSON key of a service account registered with Earth Engine
 #   GEE_PROJECT              – your Earth Engine Cloud project id
 on:
@@ -38,20 +39,25 @@ jobs:
         id: creds
         run: |
           if [ -z "$GEE_SERVICE_ACCOUNT_KEY" ] || [ -z "$GEE_PROJECT" ]; then
-            echo "::notice::Earth Engine secrets not set — skipping detection."
+            echo "::notice::Earth Engine secrets not set — importing Cerulean only (no land detection, no enrichment)."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/setup-python@v6
-        if: steps.creds.outputs.ok == 'true'
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: pipeline/requirements.txt
-      - if: steps.creds.outputs.ok == 'true'
-        run: pip install -r pipeline/requirements.txt
-      - name: Run detection
+      - run: pip install -r pipeline/requirements.txt
+      - name: Import marine detections (SkyTruth Cerulean)
+        run: |
+          if [ "${{ steps.creds.outputs.ok }}" = "true" ]; then
+            python pipeline/scripts/import_cerulean.py
+          else
+            python pipeline/scripts/import_cerulean.py --no-enrich
+          fi
+      - name: Detect land & creek spills
         if: steps.creds.outputs.ok == 'true'
         run: |
           ARGS="--aoi ${{ inputs.aoi || 'delta' }}"
@@ -61,7 +67,6 @@ jobs:
           python pipeline/scripts/detect.py $ARGS
       - name: Commit results
         id: commit
-        if: steps.creds.outputs.ok == 'true'
         run: |
           if git diff --quiet -- web/data; then
             echo "changed=false" >> "$GITHUB_OUTPUT"

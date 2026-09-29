@@ -11,6 +11,13 @@ export default function Dashboard() {
   const events = getEvents();
   const meta = getMeta();
   const s = summary(events);
+  // Slick areas can't be summed: a persistent sheen is seen on many passes.
+  const areas = events.filter((e) => e.status !== "false_positive").map((e) => e.area_ha).sort((a, b) => a - b);
+  const medianArea = areas.length ? areas[Math.floor(areas.length / 2)] : 0;
+  const maxArea = areas.length ? areas[areas.length - 1] : 0;
+  const coverageNote = events.some((e) => e.source === "cerulean")
+    ? "Marine coverage by SkyTruth Cerulean expanded sharply in 2023 — earlier years are incomplete, not quieter."
+    : "Verified and unverified detections, by surface";
   const season = seasonality(events);
   const dryAvg = season.filter((m) => m.dry).reduce((a, m) => a + m.avg, 0) / 5;
   const wetAvg = season.filter((m) => !m.dry).reduce((a, m) => a + m.avg, 0) / 7;
@@ -23,6 +30,7 @@ export default function Dashboard() {
           <p className="text-sm text-ink-2">
             {meta.aoi} · {fmtDate(meta.period_start)} – {fmtDate(meta.period_end)}
           </p>
+          <p className="text-xs text-muted">{meta.source}</p>
         </div>
         <p className="text-xs text-muted">Updated {fmtDate(meta.generated_at.slice(0, 10))} · model {meta.model_version}</p>
       </header>
@@ -34,16 +42,28 @@ export default function Dashboard() {
           value={fmtInt(s.verified)}
           sub={`${fmtPct(s.verified / Math.max(s.detections, 1))} of detections · ${fmtInt(s.unverified)} awaiting review`}
         />
-        <Tile label="Area affected" value={`${fmtCompact(s.areaHa)} ha`} sub={`incl. ${fmtCompact(s.mangroveHa)} ha of mangrove`} />
         <Tile
-          label="Not in official records"
-          value={fmtInt(s.unreported)}
-          sub="verified spills with no matching NOSDRA report"
+          label="Median spill size"
+          value={`${fmtCompact(medianArea)} ha`}
+          sub={`largest ${fmtCompact(maxArea)} ha${s.mangroveHa > 0 ? ` · ${fmtCompact(s.mangroveHa)} ha of mangrove touched` : ""}`}
         />
+        {events.some((e) => e.nosdra_match !== null) ? (
+          <Tile
+            label="Not in official records"
+            value={fmtInt(s.unreported)}
+            sub="verified spills with no matching NOSDRA report"
+          />
+        ) : (
+          <Tile
+            label="People near a spill"
+            value={fmtCompact(events.filter((e) => e.status !== "false_positive").reduce((a, e) => Math.max(a, e.people_5km), 0))}
+            sub="most people living within 5 km of a single detection"
+          />
+        )}
       </section>
 
       <section className="mt-3 grid gap-3 lg:grid-cols-2">
-        <Card title="Spills per year" desc="Verified and unverified detections, by surface">
+        <Card title="Spills per year" desc={coverageNote}>
           <YearlyChart data={byYear(events)} />
         </Card>
         <Card
