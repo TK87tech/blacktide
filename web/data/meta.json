@@ -1,8 +1,8 @@
 {
   "sample": false,
-  "generated_at": "2026-09-29T12:14:50+00:00",
+  "generated_at": "2026-10-03T11:29:02+00:00",
   "period_start": "2015-01-02",
-  "period_end": "2026-09-24",
+  "period_end": "2026-09-30",
   "model_version": "cerulean + nosdra",
   "aoi": "Niger Delta (Rivers, Bayelsa, Delta, Akwa Ibom) and coastal waters",
   "source": "Sea & coast: SkyTruth Cerulean (Sentinel-1). Land, swamp & creeks: NOSDRA official reports, with a Sentinel-1/2 satellite impact score."
